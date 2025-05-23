@@ -11,6 +11,7 @@ import {
   saveOrdersToLocalStorage,
   deleteOrderFromLocalStorage
 } from '../utils/localStorageUtils';
+import UpdateOrderChild from '../child/UpdateOrderChild';
 
 const DispatcherOrders = ({ orderType }) => {
   const [createOrder, setCreateOrder] = useState(false);
@@ -23,6 +24,7 @@ const DispatcherOrders = ({ orderType }) => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [updateOrderDetails, setUpdateOrderDetails] = useState(false)
 
   const fetchOrders = async (type = orderType) => {
     try {
@@ -88,15 +90,18 @@ const DispatcherOrders = ({ orderType }) => {
   const handleView = (rowData) => {
     setSelectedOrder(rowData);
     setShowModal(true);
+    
   };
 
   const handleClose = () => {
     setShowModal(false);
     setCreateOrder(false);
+    setUpdateOrderDetails(false)
   };
 
-  const handleEdit = (order) => {
-    console.log("Editing order:", order);
+  const handleEdit = (rowData) => {
+    setSelectedOrder(rowData);
+    setUpdateOrderDetails(true)
   };
 
   const calculateTotalItems = (order) => {
@@ -112,10 +117,8 @@ const DispatcherOrders = ({ orderType }) => {
       let allCompleted = true;
       let hasAssignments = false;
 
-      // Extract team_assignments from the current structure
       const teamAssignments = item.team_assignments || {};
 
-      // Check glass assignments
       if (teamAssignments.glass && teamAssignments.glass.length > 0) {
         hasAssignments = true;
         for (const glass of teamAssignments.glass) {
@@ -137,7 +140,6 @@ const DispatcherOrders = ({ orderType }) => {
         }
       }
 
-      // Check boxes assignments
       if (allCompleted && teamAssignments.boxes && teamAssignments.boxes.length > 0) {
         hasAssignments = true;
         for (const box of teamAssignments.boxes) {
@@ -148,7 +150,6 @@ const DispatcherOrders = ({ orderType }) => {
         }
       }
 
-      // Check pumps assignments
       if (allCompleted && teamAssignments.pumps && teamAssignments.pumps.length > 0) {
         hasAssignments = true;
         for (const pump of teamAssignments.pumps) {
@@ -432,6 +433,12 @@ const DispatcherOrders = ({ orderType }) => {
       )}
       {showModal && (
         <ViewOrderComponent
+          onClose={handleClose}
+          order={selectedOrder}
+        />
+      )}
+      {updateOrderDetails && (
+        <UpdateOrderChild
           onClose={handleClose}
           order={selectedOrder}
         />
