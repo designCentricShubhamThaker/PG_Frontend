@@ -1,6 +1,9 @@
+
 import { Plus, Eye, CheckCircle, ChevronRight, Search } from 'lucide-react';
 import { MdDeleteOutline } from "react-icons/md";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
+import Swal from 'sweetalert2';
 import CreateOrderChild from '../child/CreateOrderChild';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
@@ -9,9 +12,12 @@ import {
   getOrdersFromLocalStorage,
   hasOrdersInLocalStorage,
   saveOrdersToLocalStorage,
-  deleteOrderFromLocalStorage
+  deleteOrderFromLocalStorage,
+  updateOrderInLocalStorage,
+  updateDispatcherOrderInLocalStorage
 } from '../utils/localStorageUtils';
 import UpdateOrderChild from '../child/UpdateOrderChild';
+import { useSocket } from '../context/SocketContext';
 
 const DispatcherOrders = ({ orderType }) => {
   const [createOrder, setCreateOrder] = useState(false);
@@ -24,7 +30,9 @@ const DispatcherOrders = ({ orderType }) => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [updateOrderDetails, setUpdateOrderDetails] = useState(false)
+  const [updateOrderDetails, setUpdateOrderDetails] = useState(false);
+
+  const { socket, isConnected, notifyOrderDelete } = useSocket();
 
   const fetchOrders = async (type = orderType) => {
     try {
@@ -50,6 +58,131 @@ const DispatcherOrders = ({ orderType }) => {
     }
   };
 
+  const getAssignedTeams = (order) => {
+    const teams = new Set();
+    if (!order.item_ids || !Array.isArray(order.item_ids)) {
+      return [];
+    }
+    order.item_ids.forEach(item => {
+      if (item.team_assignments) {
+        Object.keys(item.team_assignments).forEach(teamName => {
+          if (item.team_assignments[teamName] && item.team_assignments[teamName].length > 0) {
+            teams.add(teamName);
+          }
+        });
+      }
+    });
+
+    return Array.from(teams);
+  };
+
+  const handleProgressUpdate = useCallback((progressData) => {
+    console.log('📈 Received progress update in dispatcher:', progressData);
+    try {
+      const orderNumber = progressData.orderNumber || progressData.order_number;
+
+      if (!orderNumber) {
+        console.warn('No order number in progress update');
+        return;
+      }
+      setOrders(prevOrders => {
+        const updatedOrders = prevOrders.map(order => {
+          if (order.order_number === orderNumber) {
+            let updatedOrder;
+            if (progressData.orderData && progressData.orderData._id) {
+              updatedOrder = { ...order, ...progressData.orderData };
+            } else {
+              updatedOrder = { ...order };
+            }
+            
+            if (updatedOrder.order_status === 'Completed' && order.order_status !== 'Completed') {
+              console.log(`Order ${orderNumber} completed, updating localStorage`);
+              updateDispatcherOrderInLocalStorage(updatedOrder);
+              
+              if (orderType === 'pending') {
+                return null;
+              }
+            } else if (updatedOrder.order_status !== 'Completed' && updatedOrder !== order) {
+              updateDispatcherOrderInLocalStorage(updatedOrder);
+            }
+            
+            return updatedOrder;
+          }
+          return order;
+        }).filter(Boolean); 
+  
+        const orderToUpdate = updatedOrders.find(o => o.order_number === orderNumber);
+        if (orderToUpdate && orderToUpdate.order_status !== 'Completed') {
+          saveOrdersToLocalStorage(updatedOrders, orderType);
+        }     
+        return updatedOrders;
+      });
+
+      setFilteredOrders(prevFiltered => {
+        return prevFiltered.map(order => {
+          if (order.order_number === orderNumber) {
+            let updatedOrder;
+            if (progressData.orderData && progressData.orderData._id) {
+              updatedOrder = { ...order, ...progressData.orderData };
+            } else {
+              updatedOrder = { ...order };
+            }
+            if (orderType === 'pending' && updatedOrder.order_status === 'Completed') {
+              return null;
+            }
+            return updatedOrder;
+          }
+          return order;
+        }).filter(Boolean)
+      });
+
+      console.log(`✅ Order #${orderNumber} progress updated in real-time`);
+      
+    } catch (error) {
+      console.error('Error handling progress update:', error);
+    }
+  }, [orderType, updateDispatcherOrderInLocalStorage]);
+
+  const handleOrderDeleted = useCallback((deleteData) => {
+    console.log('🗑️ Dispatcher received order delete notification:', deleteData);
+    try {
+      const { orderId, orderNumber } = deleteData;
+      if (!orderId) {
+        console.warn('No order ID in delete notification');
+        return;
+      }
+      setOrders(prevOrders => {
+        const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+        saveOrdersToLocalStorage(updatedOrders, orderType);
+        return updatedOrders;
+      });
+
+      setFilteredOrders(prevFiltered => {
+        return prevFiltered.filter(order => order._id !== orderId);
+      });
+      deleteOrderFromLocalStorage(orderId);
+
+      toast.success(`Order #${orderNumber} has been deleted successfully`);
+      console.log(`✅ Order #${orderNumber} removed from dispatcher view`);
+      
+    } catch (error) {
+      console.error('Error handling order delete notification:', error);
+    }
+  }, [orderType]);
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    console.log('🔌 Setting up socket listeners for dispatcher orders');
+    socket.on('team-progress-updated', handleProgressUpdate);
+    socket.on('order-deleted', handleOrderDeleted);
+    
+    return () => {
+      socket.off('team-progress-updated', handleProgressUpdate);
+      socket.off('order-deleted', handleOrderDeleted);
+      console.log('🔌 Cleaned up socket listeners');
+    };
+  }, [socket, isConnected, handleProgressUpdate, handleOrderDeleted]);
+
   useEffect(() => {
     fetchOrders(orderType);
   }, [orderType]);
@@ -68,45 +201,125 @@ const DispatcherOrders = ({ orderType }) => {
 
   const handleCreateOrder = async () => {
     await fetchOrders(orderType);
+    toast.success("Order created successfully!");
   };
 
   const handleDelete = async (orderId) => {
     try {
+
+      const orderToDelete = orders.find(order => order._id === orderId);
+      
+      if (!orderToDelete) {
+        toast.error('Order not found');
+        return;
+      }
+
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        html: `
+          <div style="text-align: left; margin: 20px 0;">
+            <p><strong>Order Number:</strong> ${orderToDelete.order_number}</p>
+            <p><strong>Customer:</strong> ${orderToDelete.customer_name}</p>
+            <p><strong>Dispatcher:</strong> ${orderToDelete.dispatcher_name}</p>
+          </div>
+          <p style="color: #d33; font-weight: bold;">This action cannot be undone!</p>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true
+      });
+
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      Swal.fire({
+        title: 'Deleting...',
+        text: 'Please wait while we delete the order.',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      const assignedTeams = getAssignedTeams(orderToDelete);
+
       const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
 
       if (response.data.success) {
-        deleteOrderFromLocalStorage(orderId);
+        const deleteNotificationData = {
+          orderId: orderToDelete._id,
+          orderNumber: orderToDelete.order_number,
+          customerName: orderToDelete.customer_name,
+          dispatcherName: orderToDelete.dispatcher_name,
+          assignedTeams: assignedTeams
+        };
+
+        const notificationSent = notifyOrderDelete(deleteNotificationData);
+        
+        if (!notificationSent) {
+          console.warn('Failed to send delete notification via socket');
+        }
+
         const updatedOrders = orders.filter(order => order._id !== orderId);
         setOrders(updatedOrders);
         setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
+        deleteOrderFromLocalStorage(orderId);
+
+        Swal.close();
+        
+        await Swal.fire({
+          title: 'Deleted!',
+          html: `
+            <p>Order <strong>#${orderToDelete.order_number}</strong> has been deleted successfully.</p>
+            ${assignedTeams.length > 0 ? 
+              `<p style="margin-top: 10px; font-size: 14px; color: #666;">
+                Notifications sent to: <strong>${assignedTeams.join(', ').toUpperCase()}</strong> teams
+              </p>` : ''
+            }
+          `,
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true
+        });
+
       } else {
+        Swal.close();
         setError('Error deleting order: ' + (response.data.message || 'Unknown error'));
+        toast.error('Failed to delete order');
       }
     } catch (err) {
-      setError('Error deleting order: ' + (err.response?.data?.message || err.message));
+      Swal.close();
+      const errorMessage = err.response?.data?.message || err.message;
+      setError('Error deleting order: ' + errorMessage);
+      toast.error('Failed to delete order: ' + errorMessage);
     }
   };
 
   const handleView = (rowData) => {
     setSelectedOrder(rowData);
     setShowModal(true);
-
   };
 
   const handleClose = () => {
     setShowModal(false);
     setCreateOrder(false);
-    setUpdateOrderDetails(false)
+    setUpdateOrderDetails(false);
   };
 
   const handleEdit = (rowData) => {
     setSelectedOrder(rowData);
-    setUpdateOrderDetails(true)
+    setUpdateOrderDetails(true);
   };
 
   const handleUpdateOrder = (type = orderType) => {
-    const updatedOrders = getOrdersFromLocalStorage(type); 
+    const updatedOrders = getOrdersFromLocalStorage(type);
     setOrders(updatedOrders);
+    setFilteredOrders(updatedOrders);
   };
 
   const calculateTotalItems = (order) => {
@@ -169,7 +382,7 @@ const DispatcherOrders = ({ orderType }) => {
     });
 
     return completedItems;
-  }
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -219,13 +432,24 @@ const DispatcherOrders = ({ orderType }) => {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Socket connection indicator */}
       <div className="flex justify-between items-center mb-6">
-        <button
-          onClick={() => setCreateOrder(true)}
-          className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
-        >
-          <Plus size={16} /> Create Order
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setCreateOrder(true)}
+            className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
+          >
+            <Plus size={16} /> Create Order
+          </button>
+
+          {/* Socket status indicator */}
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className="text-xs text-gray-600">
+              {isConnected ? 'Real-time updates active' : 'Offline'}
+            </span>
+          </div>
+        </div>
 
         <div className="relative">
           <input
@@ -285,7 +509,7 @@ const DispatcherOrders = ({ orderType }) => {
                     const completedItems = calculateCompletedItems(order);
 
                     return (
-                      <tr key={order._id} className={rowBgColor}>
+                      <tr key={order._id} className={`${rowBgColor} transition-all duration-300`}>
                         <td className="px-2 py-3 text-center text-sm font-medium text-[#FF6900]">{order.order_number}</td>
                         <td className="px-2 py-3 text-center text-sm text-[#703800]">{order.dispatcher_name}</td>
                         <td className="px-2 py-3 text-center text-sm text-[#703800]">{order.customer_name}</td>
@@ -295,12 +519,12 @@ const DispatcherOrders = ({ orderType }) => {
                             <div className="flex-1 p-[1px] rounded-full bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#cc5500]">
                               <div className="bg-white rounded-full h-4 px-1 flex items-center overflow-hidden">
                                 <div
-                                  className="bg-[#FF6900] h-2.5 rounded-full transition-all duration-300"
+                                  className="bg-[#FF6900] h-2.5 rounded-full transition-all duration-500 ease-out"
                                   style={{ width: `${completionPercentage}%` }}
                                 ></div>
                               </div>
                             </div>
-                            <span className="text-sm font-semibold text-red-800 whitespace-nowrap">
+                            <span className="text-sm font-semibold text-red-800 whitespace-nowrap transition-all duration-300">
                               {completionPercentage}%
                             </span>
                           </div>
@@ -318,7 +542,7 @@ const DispatcherOrders = ({ orderType }) => {
                           )}
                         </td>
                         <td className="px-2 py-3 text-center text-sm">{totalItems}</td>
-                        <td className="px-2 py-3 text-center text-sm">{completedItems}</td>
+                        <td className="px-2 py-3 text-center text-sm transition-all duration-300">{completedItems}</td>
                         <td className="px-2 py-3 text-center">
                           <button
                             className="flex items-center justify-center cursor-pointer p-1.5 bg-orange-600 rounded-sm text-white hover:bg-orange-500 transition-colors duration-200 shadow-sm mx-auto"
@@ -337,7 +561,7 @@ const DispatcherOrders = ({ orderType }) => {
                         </td>
                         <td className="px-2 py-3 text-center">
                           <button
-                            className="flex items-center cursor-pointer justify-center p-1.5 bg-orange-700 rounded-sm text-white hover:bg-orange-500 transition-colors duration-200 shadow-sm mx-auto"
+                            className="flex items-center cursor-pointer justify-center p-1.5 bg-red-600 rounded-sm text-white hover:bg-red-700 transition-colors duration-200 shadow-sm mx-auto"
                             aria-label="Delete order"
                             onClick={() => handleDelete(order._id)}
                           >

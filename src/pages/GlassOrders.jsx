@@ -2,10 +2,12 @@ import { Search, Pencil } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
+import { toast } from 'react-hot-toast';
 
 
 import {
     TEAMS,
+    deleteOrderFromLocalStorage,
     getOrdersFromLocalStorage as getTeamOrdersFromLocalStorage,
     hasOrdersInLocalStorage as hasTeamOrdersInLocalStorage,
     saveOrdersToLocalStorage as saveTeamOrdersToLocalStorage,
@@ -25,8 +27,6 @@ const GlassOrders = ({ orderType }) => {
     const [showModal, setShowModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
-
-
     const { socket, isConnected } = useSocket();
 
     const getRemainingQty = (assignment) => {
@@ -102,6 +102,7 @@ const GlassOrders = ({ orderType }) => {
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = newOrder;
                 console.log('Updated existing order:', newOrder.order_number);
+
             } else {
 
                 updatedOrders = [newOrder, ...prevOrders];
@@ -176,19 +177,55 @@ const GlassOrders = ({ orderType }) => {
         if (updateData.editedFields && updateData.editedFields.length > 0) {
             console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
             // You could show a toast notification here if you have a notification system
+            toast.success("order progress updated !")
         }
     }, [orderType]);
+
+    const handleOrderDeleted = useCallback((deleteData) => {
+        console.log('🗑️ Glass team received order delete notification:', deleteData);
+        try {
+            const { orderId, orderNumber } = deleteData;
+            if (!orderId) {
+                console.warn('No order ID in delete notification');
+                return;
+            }
+
+            setOrders(prevOrders => {
+                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+                return updatedOrders;
+            });
+
+            setFilteredOrders(prevFiltered => {
+                return prevFiltered.filter(order => order._id !== orderId);
+            });
+
+            // Remove from localStorage
+            deleteOrderFromLocalStorage(orderId);
+
+            toast.success(`Order #${orderNumber} has been deleted`);
+            console.log(`✅ Order #${orderNumber} removed from glass team view`);
+
+        } catch (error) {
+            console.error('Error handling order delete notification:', error);
+        }
+    }, [orderType]);
+
 
     useEffect(() => {
         if (!socket) return;
         socket.on('new-order', handleNewOrder);
         socket.on('order-updated', handleOrderUpdate);
+        socket.on('order-deleted', handleOrderDeleted);
+
 
         return () => {
             socket.off('new-order', handleNewOrder);
             socket.off('order-updated', handleOrderUpdate);
+            socket.off('order-deleted', handleOrderDeleted);
+
         };
-    }, [socket, handleNewOrder, handleOrderUpdate]);
+    }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
     const fetchGlassOrders = async (type = orderType) => {
         try {

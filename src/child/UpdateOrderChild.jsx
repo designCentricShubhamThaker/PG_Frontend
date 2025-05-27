@@ -9,6 +9,8 @@ import { boxData } from "../data/boxData"
 import { pumpData } from "../data/pumpData"
 import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils';
 import { useSocket } from '../context/SocketContext';
+import { toast } from 'react-hot-toast';
+
 
 const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
   const [orderNumber, setOrderNumber] = useState("");
@@ -119,7 +121,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
 
       const transformedItems = [];
 
-      // Use item_ids array from the order structure
       const itemsToProcess = order.item_ids || [];
 
       if (Array.isArray(itemsToProcess) && itemsToProcess.length > 0) {
@@ -134,7 +135,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
             }
           };
 
-          // Handle the team_assignments structure from item_ids
           if (item.team_assignments) {
             // Handle Glass assignments
             if (item.team_assignments.glass && Array.isArray(item.team_assignments.glass) && item.team_assignments.glass.length > 0) {
@@ -157,7 +157,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.glass = [createDefaultTeamAssignment('glass')];
             }
 
-            // Handle Cap assignments
             if (item.team_assignments.caps && Array.isArray(item.team_assignments.caps) && item.team_assignments.caps.length > 0) {
               transformedItem.teamAssignments.caps = item.team_assignments.caps.map(cap => ({
                 cap_name: cap.cap_name || "N/A",
@@ -177,7 +176,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.caps = [createDefaultTeamAssignment('caps')];
             }
 
-            // Handle Box assignments
             if (item.team_assignments.boxes && Array.isArray(item.team_assignments.boxes) && item.team_assignments.boxes.length > 0) {
               transformedItem.teamAssignments.boxes = item.team_assignments.boxes.map(box => ({
                 box_name: box.box_name || "N/A",
@@ -195,7 +193,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.boxes = [createDefaultTeamAssignment('boxes')];
             }
 
-            // Handle Pump assignments
             if (item.team_assignments.pumps && Array.isArray(item.team_assignments.pumps) && item.team_assignments.pumps.length > 0) {
               transformedItem.teamAssignments.pumps = item.team_assignments.pumps.map(pump => ({
                 pump_name: pump.pump_name || "N/A",
@@ -217,7 +214,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
           transformedItems.push(transformedItem);
         });
       } else {
-        // If no items exist, create one default item
+
         transformedItems.push({
           name: "Item 1",
           teamAssignments: {
@@ -231,7 +228,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
 
       setOrderItems(transformedItems);
 
-      // Pre-fill search states with existing values
       const initialGlassSearches = {};
       const initialCapSearches = {};
       const initialBoxSearches = {};
@@ -447,7 +443,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         if (previousOrder.customer_name !== updatedOrder.customer_name) editedFields.push('customer_name');
         if (JSON.stringify(previousOrder.items) !== JSON.stringify(updatedOrder.items)) editedFields.push('items');
 
-        // Send socket notification to teams
+
         if (notifyOrderEdit) {
           const editData = {
             updatedOrder,
@@ -470,6 +466,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         onClose();
 
         console.log('Order updated successfully and teams notified');
+        toast.success("order details updated successfully !")
 
       } else {
         setError('Error updating order: ' + (response.data.message || 'Unknown error'));

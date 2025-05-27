@@ -42,13 +42,18 @@ export const SocketProvider = ({ children }) => {
         });
 
         socketInstance.on('connected-users', setConnectedUsers);
-        
+
         socketInstance.on('new-order', (orderData) => {
             console.log('📦 New order received:', orderData);
         });
 
         socketInstance.on('order-updated', (updateData) => {
             console.log('✏️ Order updated received:', updateData);
+        });
+
+        // Add debug logging for progress updates
+        socketInstance.on('team-progress-updated', (progressData) => {
+            console.log('📈 Progress update received in SocketProvider:', progressData);
         });
 
         setSocket(socketInstance);
@@ -61,13 +66,16 @@ export const SocketProvider = ({ children }) => {
     const registerUser = useCallback((socketInstance) => {
         if (!user || !socketInstance) return;
 
-        socketInstance.emit('register', {
+        const registrationData = {
             userId: user.id || socketInstance.id,
             role: user.role,
             team: user.team?.toLowerCase().trim(),
-        });
-    }, [user]);
+        };
 
+        console.log('🔄 Registering user:', registrationData);
+
+        socketInstance.emit('register', registrationData);
+    }, [user]);
 
     const notifyTeam = useCallback((orderData) => {
         if (!socket || !socket.connected || !orderData) {
@@ -77,7 +85,7 @@ export const SocketProvider = ({ children }) => {
 
         try {
             const assignedTeams = [];
-            
+
             orderData.item_ids?.forEach(item => {
                 if (item.team_assignments) {
                     Object.keys(item.team_assignments).forEach(team => {
@@ -106,7 +114,6 @@ export const SocketProvider = ({ children }) => {
         }
     }, [socket]);
 
-
     const notifyOrderEdit = useCallback((editData) => {
         if (!socket || !socket.connected || !editData) {
             console.warn('Cannot send edit notification - socket not connected or no data');
@@ -114,10 +121,10 @@ export const SocketProvider = ({ children }) => {
         }
 
         try {
-            const { 
-                updatedOrder, 
-                previousOrder, 
-                editedFields = [] 
+            const {
+                updatedOrder,
+                previousOrder,
+                editedFields = []
             } = editData;
 
             const currentAssignedTeams = [];
@@ -168,12 +175,92 @@ export const SocketProvider = ({ children }) => {
         }
     }, [socket]);
 
+    const notifyProgressUpdate = useCallback((progressData) => {
+        if (!socket || !socket.connected || !progressData) {
+            console.warn('Cannot send progress notification - socket not connected or no data');
+            return false;
+        }
+
+        try {
+            console.log('📤 Sending progress update:', progressData);
+
+            const notificationData = {
+                orderNumber: progressData.orderNumber,
+                itemName: progressData.itemName,
+                team: progressData.team,
+                updates: progressData.updates,
+                updatedOrder: progressData.updatedOrder,
+                timestamp: new Date().toISOString(),
+                customerName: progressData.customerName,
+                dispatcherName: progressData.dispatcherName
+            };
+
+            console.log('📊 Progress notification data:', {
+                orderNumber: notificationData.orderNumber,
+                team: notificationData.team,
+                hasUpdatedOrder: !!notificationData.updatedOrder,
+                updatesCount: notificationData.updates?.length || 0
+            });
+
+            socket.emit('team-progress-updated', notificationData);
+            console.log('📤 Progress update notification sent:', {
+                order: progressData.orderNumber,
+                team: progressData.team,
+                item: progressData.itemName
+            });
+            return true;
+        } catch (error) {
+            console.error('Error sending progress notification:', error);
+            return false;
+        }
+    }, [socket]);
+
+  
+    const notifyOrderDelete = useCallback((deleteData) => {
+        if (!socket || !socket.connected || !deleteData) {
+            console.warn('Cannot send delete notification - socket not connected or no data');
+            return false;
+        }
+
+        try {
+            const {
+                orderId,
+                orderNumber,
+                customerName,
+                dispatcherName,
+                assignedTeams = []
+            } = deleteData;
+
+            const notificationData = {
+                orderId,
+                orderNumber,
+                customerName,
+                dispatcherName,
+                assignedTeams,
+                timestamp: new Date().toISOString()
+            };
+
+            socket.emit('order-deleted', notificationData);
+            console.log('📤 Order delete notification sent:', {
+                orderId,
+                orderNumber,
+                teams: assignedTeams
+            });
+            return true;
+        } catch (error) {
+            console.error('Error sending delete notification:', error);
+            return false;
+        }
+    }, [socket]);
+
     const contextValue = {
         socket,
         isConnected,
         connectedUsers,
         notifyTeam,
-        notifyOrderEdit, 
+        notifyOrderEdit,
+        notifyProgressUpdate,
+         notifyOrderDelete
     };
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;

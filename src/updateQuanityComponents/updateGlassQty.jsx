@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
-import { X, Save } from 'lucide-react';
+import { X, Save, CloudHail } from 'lucide-react';
 import axios from 'axios';
 import {
     TEAMS,
@@ -9,12 +9,16 @@ import {
     saveOrdersToLocalStorage,
     getOrdersFromLocalStorage
 } from '../utils/localStorageUtils';
+import { useAuth } from '../context/useAuth';
+import { useSocket } from '../context/SocketContext';
 
 const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
+    const { user } = useAuth()
+    const { notifyProgressUpdate } = useSocket()
 
     useEffect(() => {
         if (isOpen && itemData?.team_assignments?.glass) {
@@ -138,6 +142,27 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
+               
+
+                if (notifyProgressUpdate) {
+                    notifyProgressUpdate({
+                        orderNumber: orderData.order_number,
+                        itemName: itemData.name,
+                        team: user.team,
+                        updates: updates.map(update => ({
+                            assignmentId: update.assignmentId,
+                            quantity: update.newEntry.quantity,
+                            notes: update.newEntry.notes,
+                            newTotalCompleted: update.newTotalCompleted,
+                            newStatus: update.newStatus
+                        })),
+                        updatedOrder: updatedOrder,
+                        customerName: orderData.customer_name,
+                        dispatcherName: orderData.dispatcher_name
+                    });
+                    console.log('notif sennnntt')
+                }
+
                 setSuccessMessage('Quantities updated successfully!');
 
                 setTimeout(() => {

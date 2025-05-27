@@ -61,7 +61,7 @@ const hasOrdersInLocalStorage = (orderType, team = TEAMS.DISPATCHER) => {
   return !!localStorage.getItem(storageKey);
 };
 
-// Enhanced function specifically for dispatcher order updates
+
 const updateDispatcherOrderInLocalStorage = (updatedOrder) => {
   try {
     if (!updatedOrder || typeof updatedOrder !== 'object' || !updatedOrder._id) {
@@ -72,25 +72,20 @@ const updateDispatcherOrderInLocalStorage = (updatedOrder) => {
     const updatedOrderCopy = JSON.parse(JSON.stringify(updatedOrder));
     const orderId = updatedOrderCopy._id;
     
-    // For dispatcher, determine order type based on order_status
     const newOrderType = updatedOrderCopy.order_status === 'Completed' ? 'completed' : 'pending';
     
-    // Get both pending and completed orders for dispatcher
     const pendingOrders = getOrdersFromLocalStorage('pending', TEAMS.DISPATCHER);
     const completedOrders = getOrdersFromLocalStorage('completed', TEAMS.DISPATCHER);
     
-    // Remove the order from both categories
     const newPendingOrders = pendingOrders.filter(order => order._id !== orderId);
     const newCompletedOrders = completedOrders.filter(order => order._id !== orderId);
     
-    // Add the updated order to the correct category
     if (newOrderType === 'completed') {
       newCompletedOrders.push(updatedOrderCopy);
     } else {
       newPendingOrders.push(updatedOrderCopy);
     }
     
-    // Save both categories
     const pendingSaved = saveOrdersToLocalStorage(newPendingOrders, 'pending', TEAMS.DISPATCHER);
     const completedSaved = saveOrdersToLocalStorage(newCompletedOrders, 'completed', TEAMS.DISPATCHER);
     
@@ -112,8 +107,6 @@ const addOrderToLocalStorage = (newOrder, team = TEAMS.DISPATCHER) => {
       console.error('Invalid order data');
       return false;
     }
-
-    // For dispatcher team, use the enhanced update function
     if (team === TEAMS.DISPATCHER) {
       return updateDispatcherOrderInLocalStorage(newOrder);
     }
@@ -157,7 +150,6 @@ const areAllTeamAssignmentsCompleted = (order, team) => {
 };
 
 const determineOrderType = (order, team = TEAMS.DISPATCHER) => {
-  // For dispatcher team, use the order status
   if (team === TEAMS.DISPATCHER) {
     return order.order_status === 'Completed' ? 'completed' : 'pending';
   }
@@ -172,8 +164,6 @@ const updateOrderInLocalStorage = (orderId, updatedOrder, team = TEAMS.DISPATCHE
       console.error('Invalid order data for update');
       return false;
     }
-
-    // For dispatcher team, use the enhanced update function
     if (team === TEAMS.DISPATCHER) {
       return updateDispatcherOrderInLocalStorage(updatedOrder);
     }
@@ -193,7 +183,6 @@ const updateOrderInLocalStorage = (orderId, updatedOrder, team = TEAMS.DISPATCHE
       newPendingOrders.push(updatedOrderCopy);
     }
     
-    // Save both categories
     saveOrdersToLocalStorage(newPendingOrders, 'pending', team);
     saveOrdersToLocalStorage(newCompletedOrders, 'completed', team);
     
@@ -251,7 +240,6 @@ const clearAllTeamOrdersFromLocalStorage = () => {
   }
 };
 
-// Helper function to check and move orders between categories for a specific team
 const revalidateOrderStatusForTeam = (team = TEAMS.DISPATCHER) => {
   try {
     const pendingOrders = getOrdersFromLocalStorage('pending', team);
