@@ -90,7 +90,7 @@ const DispatcherOrders = ({ orderType }) => {
   const handleView = (rowData) => {
     setSelectedOrder(rowData);
     setShowModal(true);
-    
+
   };
 
   const handleClose = () => {
@@ -102,6 +102,11 @@ const DispatcherOrders = ({ orderType }) => {
   const handleEdit = (rowData) => {
     setSelectedOrder(rowData);
     setUpdateOrderDetails(true)
+  };
+
+  const handleUpdateOrder = (type = orderType) => {
+    const updatedOrders = getOrdersFromLocalStorage(type); 
+    setOrders(updatedOrders);
   };
 
   const calculateTotalItems = (order) => {
@@ -128,8 +133,6 @@ const DispatcherOrders = ({ orderType }) => {
           }
         }
       }
-
-      // Check caps assignments
       if (allCompleted && teamAssignments.caps && teamAssignments.caps.length > 0) {
         hasAssignments = true;
         for (const cap of teamAssignments.caps) {
@@ -199,7 +202,6 @@ const DispatcherOrders = ({ orderType }) => {
     const percent = (completedItems / totalItems) * 100;
     return Number(percent.toFixed(2));
   };
-
 
   const indexOfLastOrder = currentPage * ordersPerPage;
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
@@ -441,6 +443,7 @@ const DispatcherOrders = ({ orderType }) => {
         <UpdateOrderChild
           onClose={handleClose}
           order={selectedOrder}
+          onUpdateOrder={handleUpdateOrder}
         />
       )}
     </div>

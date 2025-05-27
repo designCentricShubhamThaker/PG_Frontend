@@ -1,7 +1,8 @@
 import { Search, Pencil } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
+
 
 import {
     TEAMS,
@@ -11,6 +12,7 @@ import {
     updateOrderInLocalStorage
 } from '../utils/localStorageUtils';
 import UpdateGlassQty from '../updateQuanityComponents/updateGlassQty';
+import { useSocket } from '../context/SocketContext';
 
 const GlassOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
@@ -24,6 +26,8 @@ const GlassOrders = ({ orderType }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
 
+
+    const { socket, isConnected } = useSocket();
 
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
@@ -50,7 +54,6 @@ const GlassOrders = ({ orderType }) => {
         return items.every(item => isItemCompleted(item));
     };
 
-
     const updateOrderStatus = (updatedOrder) => {
         const isCompleted = isOrderCompleted(updatedOrder);
         const newStatus = isCompleted ? 'Completed' : 'Pending';
@@ -63,6 +66,129 @@ const GlassOrders = ({ orderType }) => {
 
         return updatedOrder;
     };
+
+    const hasGlassAssignments = (order) => {
+        return order.item_ids?.some(item =>
+            item.team_assignments?.glass && item.team_assignments.glass.length > 0
+        );
+    };
+
+    const handleNewOrder = useCallback((orderData) => {
+        console.log('📦 Glass team received new order:', orderData);
+
+        if (!orderData.orderData) return;
+
+        const newOrder = orderData.orderData;
+
+        if (!hasGlassAssignments(newOrder)) {
+            console.log('Order has no glass assignments, ignoring');
+            return;
+        }
+
+        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
+        if (orderStatus !== currentViewType) {
+            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+            return;
+        }
+
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+
+            let updatedOrders;
+            if (existingOrderIndex >= 0) {
+
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = newOrder;
+                console.log('Updated existing order:', newOrder.order_number);
+            } else {
+
+                updatedOrders = [newOrder, ...prevOrders];
+                console.log('Added new order:', newOrder.order_number);
+            }
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+
+            return updatedOrders;
+        });
+    }, [orderType]);
+
+    const handleOrderUpdate = useCallback((updateData) => {
+        console.log('✏️ Glass team received order update:', updateData);
+
+        if (!updateData.orderData) return;
+
+        const updatedOrder = updateData.orderData;
+        const { hasAssignments, wasRemoved } = updateData;
+
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
+
+            if (wasRemoved || !hasAssignments) {
+                console.log('Order removed from glass team:', updatedOrder.order_number);
+                if (existingOrderIndex >= 0) {
+                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    return filteredOrders;
+                }
+                return prevOrders;
+            }
+
+            if (!hasGlassAssignments(updatedOrder)) {
+                console.log('Updated order has no glass assignments, removing if exists');
+                if (existingOrderIndex >= 0) {
+                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    return filteredOrders;
+                }
+                return prevOrders;
+            }
+
+            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+            const currentViewType = orderType.toLowerCase();
+
+            if (orderStatus !== currentViewType) {
+                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+
+                if (existingOrderIndex >= 0) {
+                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    return filteredOrders;
+                }
+                return prevOrders;
+            }
+
+            let updatedOrders;
+            if (existingOrderIndex >= 0) {
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = updatedOrder;
+                console.log('Updated existing order:', updatedOrder.order_number);
+            } else {
+                updatedOrders = [updatedOrder, ...prevOrders];
+                console.log('Added updated order to current view:', updatedOrder.order_number);
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+
+            return updatedOrders;
+        });
+
+        if (updateData.editedFields && updateData.editedFields.length > 0) {
+            console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
+            // You could show a toast notification here if you have a notification system
+        }
+    }, [orderType]);
+
+    useEffect(() => {
+        if (!socket) return;
+        socket.on('new-order', handleNewOrder);
+        socket.on('order-updated', handleOrderUpdate);
+
+        return () => {
+            socket.off('new-order', handleNewOrder);
+            socket.off('order-updated', handleOrderUpdate);
+        };
+    }, [socket, handleNewOrder, handleOrderUpdate]);
 
     const fetchGlassOrders = async (type = orderType) => {
         try {
@@ -133,8 +259,7 @@ const GlassOrders = ({ orderType }) => {
         setShowModal(true);
     };
 
-    const handleOrderUpdate = (updatedOrder) => {
-
+    const handleLocalOrderUpdate = (updatedOrder) => {
         const processedOrder = updateOrderStatus(updatedOrder);
         const updatedOrders = orders.map(order =>
             order._id === processedOrder._id ? processedOrder : order
@@ -329,9 +454,18 @@ const GlassOrders = ({ orderType }) => {
     return (
         <div className="flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-orange-700">
-                    Glass Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
-                </h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold text-orange-700">
+                        Glass Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                    </h2>
+                    {/* Socket connection indicator */}
+                    <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+                            {isConnected ? 'Live' : 'Offline'}
+                        </span>
+                    </div>
+                </div>
 
                 <div className="relative">
                     <input
@@ -435,14 +569,13 @@ const GlassOrders = ({ orderType }) => {
                 </div>
             </div>
 
-
             {showModal && selectedOrder && selectedItem && (
                 <UpdateGlassQty
                     isOpen={showModal}
                     onClose={handleClose}
                     orderData={selectedOrder}
                     itemData={selectedItem}
-                    onUpdate={handleOrderUpdate}
+                    onUpdate={handleLocalOrderUpdate}
                 />
             )}
         </div>
