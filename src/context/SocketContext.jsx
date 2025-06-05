@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { useAuth } from './useAuth';
+import { useAuth } from './useAuth.jsx';
 
 const SocketContext = createContext(null);
 
@@ -15,6 +15,15 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (!user || !user.role) return;
 
+        // const socketInstance = io('https://pg-backend-udfn.onrender.com', {
+        //     withCredentials: true,
+        //     transports: ['websocket', 'polling'],
+        //     query: {
+        //         userId: user.id || 'anonymous',
+        //         role: user.role,
+        //         team: user.team || 'unknown',
+        //     }
+        // });
         const socketInstance = io('http://localhost:5000', {
             withCredentials: true,
             transports: ['websocket', 'polling'],

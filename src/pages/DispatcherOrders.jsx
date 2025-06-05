@@ -4,10 +4,10 @@ import { MdDeleteOutline } from "react-icons/md";
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import Swal from 'sweetalert2';
-import CreateOrderChild from '../child/CreateOrderChild';
+import CreateOrderChild from '../child/CreateOrderChild.jsx';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
-import ViewOrderComponent from '../components/viewDispatcherOrders';
+import ViewOrderComponent from '../components/viewDispatcherOrders.jsx';
 import {
   getOrdersFromLocalStorage,
   hasOrdersInLocalStorage,
@@ -45,6 +45,7 @@ const DispatcherOrders = ({ orderType }) => {
         return;
       }
 
+      // const response = await axios.get(`https://pg-backend-udfn.onrender.com/api/orders?orderType=${type}`);
       const response = await axios.get(`http://localhost:5000/api/orders?orderType=${type}`);
       const fetchedOrders = response.data.data || [];
 
@@ -205,101 +206,135 @@ const DispatcherOrders = ({ orderType }) => {
   };
 
   const handleDelete = async (orderId) => {
-    try {
-
-      const orderToDelete = orders.find(order => order._id === orderId);
-      
-      if (!orderToDelete) {
-        toast.error('Order not found');
-        return;
-      }
-
-      const result = await Swal.fire({
-        title: 'Are you sure?',
-        html: `
-          <div style="text-align: left; margin: 20px 0;">
-            <p><strong>Order Number:</strong> ${orderToDelete.order_number}</p>
-            <p><strong>Customer:</strong> ${orderToDelete.customer_name}</p>
-            <p><strong>Dispatcher:</strong> ${orderToDelete.dispatcher_name}</p>
-          </div>
-          <p style="color: #d33; font-weight: bold;">This action cannot be undone!</p>
-        `,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-        reverseButtons: true
-      });
-
-      if (!result.isConfirmed) {
-        return;
-      }
-
-      Swal.fire({
-        title: 'Deleting...',
-        text: 'Please wait while we delete the order.',
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        }
-      });
-
-      const assignedTeams = getAssignedTeams(orderToDelete);
-
-      const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
-
-      if (response.data.success) {
-        const deleteNotificationData = {
-          orderId: orderToDelete._id,
-          orderNumber: orderToDelete.order_number,
-          customerName: orderToDelete.customer_name,
-          dispatcherName: orderToDelete.dispatcher_name,
-          assignedTeams: assignedTeams
-        };
-
-        const notificationSent = notifyOrderDelete(deleteNotificationData);
-        
-        if (!notificationSent) {
-          console.warn('Failed to send delete notification via socket');
-        }
-
-        const updatedOrders = orders.filter(order => order._id !== orderId);
-        setOrders(updatedOrders);
-        setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
-        deleteOrderFromLocalStorage(orderId);
-
-        Swal.close();
-        
-        await Swal.fire({
-          title: 'Deleted!',
-          html: `
-            <p>Order <strong>#${orderToDelete.order_number}</strong> has been deleted successfully.</p>
-            ${assignedTeams.length > 0 ? 
-              `<p style="margin-top: 10px; font-size: 14px; color: #666;">
-                Notifications sent to: <strong>${assignedTeams.join(', ').toUpperCase()}</strong> teams
-              </p>` : ''
-            }
-          `,
-          icon: 'success',
-          timer: 3000,
-          timerProgressBar: true
-        });
-
-      } else {
-        Swal.close();
-        setError('Error deleting order: ' + (response.data.message || 'Unknown error'));
-        toast.error('Failed to delete order');
-      }
-    } catch (err) {
-      Swal.close();
-      const errorMessage = err.response?.data?.message || err.message;
-      setError('Error deleting order: ' + errorMessage);
-      toast.error('Failed to delete order: ' + errorMessage);
+  try {
+    const orderToDelete = orders.find(order => order._id === orderId);
+    
+    if (!orderToDelete) {
+      toast.error('Order not found');
+      return;
     }
-  };
 
+    const result = await Swal.fire({
+      title: 'Delete Order',
+      html: `
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin: 20px 0; text-align: center;">
+          <div>
+            <div style="font-weight: 600; color: #666; font-size: 12px; margin-bottom: 4px;">ORDER</div>
+            <div style="font-weight: 700; color: #000;">#${orderToDelete.order_number}</div>
+          </div>
+          <div>
+            <div style="font-weight: 600; color: #666; font-size: 12px; margin-bottom: 4px;">CUSTOMER</div>
+            <div style="font-weight: 700; color: #000;">${orderToDelete.customer_name}</div>
+          </div>
+          <div>
+            <div style="font-weight: 600; color: #666; font-size: 12px; margin-bottom: 4px;">DISPATCHER</div>
+            <div style="font-weight: 700; color: #000;">${orderToDelete.dispatcher_name}</div>
+          </div>
+        </div>
+        <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-top: 16px;">
+          <strong style="color: #856404;">⚠️ This action cannot be undone</strong>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+      width: '600px',
+      allowOutsideClick: false
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    Swal.fire({
+      title: 'Deleting...',
+      html: '<div style="padding: 20px;">Please wait...</div>',
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    const assignedTeams = getAssignedTeams(orderToDelete);
+
+    // API call (uncomment the appropriate one)
+    // const response = await axios.delete(`https://pg-backend-udfn.onrender.com/api/orders/${orderId}`);
+    const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
+
+    if (response.data.success) {
+      const deleteNotificationData = {
+        orderId: orderToDelete._id,
+        orderNumber: orderToDelete.order_number,
+        customerName: orderToDelete.customer_name,
+        dispatcherName: orderToDelete.dispatcher_name,
+        assignedTeams: assignedTeams
+      };
+
+      const notificationSent = notifyOrderDelete(deleteNotificationData);
+      
+      if (!notificationSent) {
+        console.warn('Failed to send delete notification via socket');
+      }
+
+      // Update state
+      const updatedOrders = orders.filter(order => order._id !== orderId);
+      setOrders(updatedOrders);
+      setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
+      deleteOrderFromLocalStorage(orderId);
+
+      Swal.close();
+      
+      await Swal.fire({
+        title: 'Order Deleted',
+        html: `
+          <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin: 20px 0;">
+            <div style="color: #28a745; font-size: 48px;">✓</div>
+            <div>
+              <div style="font-weight: 600; margin-bottom: 8px;">
+                Order #${orderToDelete.order_number} deleted successfully
+              </div>
+              ${assignedTeams.length > 0 ? 
+                `<div style="color: #666; font-size: 14px;">
+                  Notifications sent to: <strong>${assignedTeams.join(', ').toUpperCase()}</strong>
+                </div>` : ''
+              }
+            </div>
+          </div>
+        `,
+        icon: 'success',
+        timer: 3000,
+        showConfirmButton: false,
+        width: '500px'
+      });
+
+    } else {
+      Swal.close();
+      setError('Error deleting order: ' + (response.data.message || 'Unknown error'));
+      toast.error('Failed to delete order');
+    }
+  } catch (err) {
+    Swal.close();
+    const errorMessage = err.response?.data?.message || err.message;
+    setError('Error deleting order: ' + errorMessage);
+    
+    await Swal.fire({
+      title: 'Delete Failed',
+      html: `
+        <div style="display: flex; align-items: center; gap: 15px; margin: 20px 0;">
+          <div style="color: #dc3545; font-size: 48px;">✗</div>
+          <div>
+            <div style="font-weight: 600; margin-bottom: 8px;">Unable to delete order</div>
+            <div style="color: #666; font-size: 14px; font-family: monospace;">${errorMessage}</div>
+          </div>
+        </div>
+      `,
+      icon: 'error',
+      confirmButtonText: 'OK',
+      width: '500px'
+    });
+  }
+};
   const handleView = (rowData) => {
     setSelectedOrder(rowData);
     setShowModal(true);
@@ -443,12 +478,12 @@ const DispatcherOrders = ({ orderType }) => {
           </button>
 
           {/* Socket status indicator */}
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
             <span className="text-xs text-gray-600">
               {isConnected ? 'Real-time updates active' : 'Offline'}
             </span>
-          </div>
+          </div> */}
         </div>
 
         <div className="relative">
@@ -481,7 +516,7 @@ const DispatcherOrders = ({ orderType }) => {
             <table className="min-w-full table-auto">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] text-center font-bold text-sm text-white">
-                  <th className="px-2 py-3 text-center font-medium w-16">Order No</th>
+                  <th className="px-2 py-3 text-center font-medium w-16">Order #</th>
                   <th className="px-2 py-3 text-center font-medium w-24">Dispatcher</th>
                   <th className="px-2 py-3 text-center font-medium w-24">Customer</th>
                   <th className="px-2 py-3 text-center font-medium w-24">Created At</th>

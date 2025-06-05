@@ -3,12 +3,12 @@ import { Plus, Minus, Trash } from 'lucide-react';
 import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
-import { CapData } from '../data/CapData';
-import { glassData } from '../data/glassData';
-import { boxData } from "../data/boxData"
-import { pumpData } from "../data/pumpData"
-import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils';
-import { useSocket } from '../context/SocketContext';
+import { CapData } from '../data/CapData.js';
+import { glassData } from '../data/GlassData.js';
+import { boxData } from "../data/boxData.js"
+import { pumpData } from "../data/pumpData.js"
+import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 import { toast } from 'react-hot-toast';
 
 
@@ -425,6 +425,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         items: formattedItems
       };
 
+      // const response = await axios.put(`https://pg-backend-udfn.onrender.com/api/orders/${order._id}`, orderData);
       const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
 
       if (response.data.success) {

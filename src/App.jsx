@@ -1,21 +1,21 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/useAuth';
-import Login from './pages/Login';
-import ProtectedRoutes from './routes/ProtectedRoutes';
-import DispatcherDashboard from './Dashboards/DispatcherDashboard';
-import CapDashboard from './Dashboards/CapDashboard';
-import GlassDashboard from './Dashboards/GlassDashboard';
-import PumpDashboard from './Dashboards/PumpDashboard';
-import BoxDashboard from './Dashboards/BoxDashboard';
-import StickerDashboard from './Dashboards/StickerDashboard';
-import DecoPrintDashboard from './Dashboards/DecoPrintDashboard ';
-import DecoFrostDashboard from './Dashboards/DecoFrostDashboard';
-import DecoCoatDashboard from './Dashboards/DecoCoatDashboard';
-import DecoFoilDashbaord from './Dashboards/DecoFoilDashbaord';
-import { SocketProvider } from './context/SocketContext';
+import { AuthProvider } from './context/useAuth.jsx';
+import Login from './pages/Login.jsx';
+import ProtectedRoutes from './routes/ProtectedRoutes.jsx';
+import DispatcherDashboard from './Dashboards/DispatcherDashboard.jsx';
+import CapDashboard from './Dashboards/CapDashboard.jsx';
+import GlassDashboard from './Dashboards/GlassDashboard.jsx';
+import PumpDashboard from './Dashboards/PumpDashboard.jsx';
+import BoxDashboard from './Dashboards/BoxDashboard.jsx';
+import StickerDashboard from './Dashboards/StickerDashboard.jsx';
+import DecoPrintDashboard from './Dashboards/DecoPrintDashboard.jsx';
+import DecoFrostDashboard from './Dashboards/DecoFrostDashboard.jsx';
+import DecoCoatDashboard from './Dashboards/DecoCoatDashboard.jsx';
+import DecoFoilDashbaord from './Dashboards/DecoFoilDashbaord.jsx';
+import { SocketProvider } from './context/SocketContext.jsx';
+import SuperAdminDashboard from './Dashboards/SuperAdminDashboard.jsx';
 // import LinerDashboard from './Dashboards/LinerDashboard';
-
 
 const App = () => {
   return (
@@ -26,13 +26,16 @@ const App = () => {
 
             <Route path="/login" element={<Login />} />
 
-            {/* Redirect root to login or dashboard based on auth status */}
             <Route
               path="/"
               element={<ProtectedRoutes element={<Navigate to="/admin" />} allowedRoles={['admin']} />}
             />
 
-            {/* Admin routes */}
+            <Route
+              path="/superadmin"
+              element={<ProtectedRoutes element={<SuperAdminDashboard />} allowedRoles={['superadmin']} />}
+            />
+
             <Route
               path="/admin"
               element={<ProtectedRoutes element={<DispatcherDashboard />} allowedRoles={['admin']} />}

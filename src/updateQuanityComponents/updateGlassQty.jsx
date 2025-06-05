@@ -5,12 +5,11 @@ import { X, Save, CloudHail } from 'lucide-react';
 import axios from 'axios';
 import {
     TEAMS,
-    updateOrderInLocalStorage,
     saveOrdersToLocalStorage,
     getOrdersFromLocalStorage
 } from '../utils/localStorageUtils';
-import { useAuth } from '../context/useAuth';
-import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/useAuth.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
@@ -133,6 +132,11 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 }
             }
 
+            // const response = await axios.patch('https://pg-backend-udfn.onrender.com/api/glass', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
             const response = await axios.patch('http://localhost:5000/api/glass', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,

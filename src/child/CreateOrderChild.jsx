@@ -3,12 +3,12 @@ import { Plus, Minus, Trash } from 'lucide-react';
 import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
-import { CapData } from '../data/CapData';
-import { glassData } from '../data/glassData';
-import { boxData } from "../data/boxData"
-import { pumpData } from "../data/pumpData"
-import { addOrderToLocalStorage } from '../utils/localStorageUtils';
-import { useSocket } from '../context/SocketContext';
+import { CapData } from '../data/CapData.js';
+import { glassData } from '../data/GlassData.js';
+import { boxData } from "../data/boxData.js"
+import { pumpData } from "../data/pumpData.js"
+import { addOrderToLocalStorage } from '../utils/localStorageUtils.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const [orderNumber, setOrderNumber] = useState("");
@@ -468,6 +468,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     };
 
   
+    // const response = await axios.post("https://pg-backend-udfn.onrender.com/api/orders", orderData);
     const response = await axios.post("http://localhost:5000/api/orders", orderData);
 
     if (response.data.success) {

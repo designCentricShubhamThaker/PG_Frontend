@@ -14,6 +14,7 @@ export const useAuth = () => {
 
 const loginUser = async (username, password) => {
   try {
+    // const response = await axios.post('https://pg-backend-udfn.onrender.com/api/auth/login', { username, password });
     const response = await axios.post('http://localhost:5000/api/auth/login', { username, password });
     return response.data;
   } catch (error) {
@@ -50,21 +51,22 @@ export const AuthProvider = ({ children }) => {
     checkAuthStatus();
   }, []);
 
-  // Effect to handle navigation after login
-  useEffect(() => {
-    if (user && !isLoading) {
-      // Handle navigation based on user role and team
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'user') {
-        if (user.subteam) {
-          navigate(`/dashboard/${user.team}/${user.subteam}`);
-        } else {
-          navigate(`/dashboard/${user.team}`);
-        }
+useEffect(() => {
+  if (user && !isLoading) {
+    if (user.role === 'superadmin') {
+      navigate('/superadmin');
+    } else if (user.role === 'admin') {
+      navigate('/admin');
+    } else if (user.role === 'user') {
+      if (user.subteam) {
+        navigate(`/dashboard/${user.team}/${user.subteam}`);
+      } else {
+        navigate(`/dashboard/${user.team}`);
       }
     }
-  }, [user, isLoading, navigate]);
+  }
+}, [user, isLoading, navigate]);
+
 
   const login = async (username, password) => {
     setIsLoading(true);

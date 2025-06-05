@@ -6,9 +6,9 @@ import { FaPowerOff } from "react-icons/fa";
 import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { useAuth } from '../context/useAuth';
-import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard';
-import DispatcherOrders from '../pages/DispatcherOrders';
+import { useAuth } from '../context/useAuth.jsx';
+import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
+import DispatcherOrders from '../pages/DispatcherOrders.jsx';
 
 const DispatcherDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);

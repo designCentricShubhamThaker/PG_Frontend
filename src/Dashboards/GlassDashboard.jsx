@@ -6,10 +6,9 @@ import { FaPowerOff } from "react-icons/fa";
 import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { useAuth } from '../context/useAuth';
-import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard';
-import DispatcherOrders from '../pages/DispatcherOrders';
-import GlassOrders from '../pages/GlassOrders';
+import { useAuth } from '../context/useAuth.jsx';
+import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
+import GlassOrders from '../pages/GlassOrders.jsx';
 
 const DispatcherDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -134,7 +133,7 @@ const DispatcherDashboard = () => {
               </button>
             ) : null}
             <div className="text-xl font-bold">
-              <span className="text-black">Welcome</span> <span className="text-orange-500">Dispatcher !</span>
+              <span className="text-black">Welcome</span> <span className="text-orange-500">Bottle Team !</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">
