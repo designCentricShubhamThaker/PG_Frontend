@@ -28,6 +28,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const [pumpSearches, setPumpSearches] = useState({});
 
   const [isDropdownVisible, setIsDropdownVisible] = useState(null);
+  const [showDuplicateSection, setShowDuplicateSection] = useState(false);
+  const [duplicateOrderNumber, setDuplicateOrderNumber] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [duplicateError, setDuplicateError] = useState("");
 
   const customers = [
     "Amit Verma",
@@ -116,7 +120,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { notifyTeam, isConnected } = useSocket();
+  const { notifyTeam, isConnected } = useSocket();
 
   const addOrderItem = () => {
     const newItemNumber = orderItems.length + 1;
@@ -358,156 +362,368 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     ]);
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  setIsSubmitting(true);
-  setError('');
-
-  try {
-    if (!orderNumber || !dispatcherName || !customerName) {
-      setError('Please fill in all required fields: order number, dispatcher name, and customer name');
-      setIsSubmitting(false);
+  const handleDuplicateOrder = async () => {
+    if (!duplicateOrderNumber.trim()) {
+      setDuplicateError("Please enter an order number");
       return;
     }
 
-    let hasValidItems = false;
-    const formattedItems = [];
+    setIsSearching(true);
+    setDuplicateError("");
 
-    for (const item of orderItems) {
-      const validGlassItems = item.teamAssignments.glass.filter(glass =>
-        glass.glass_name !== "N/A" && glass.glass_name !== "" && glass.quantity);
+    try {
+      // Updated API endpoint - changed from /:orderNumber to /number/:orderNumber
+      // const response = await axios.get(`https://pg-backend-udfn.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
+      const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
 
-      const validCapItems = item.teamAssignments.caps.filter(cap =>
-        cap.cap_name !== "N/A" && cap.cap_name !== "" && cap.quantity);
+      if (response.data.success && response.data.data) {
+        const orderData = response.data.data;
 
-      const validBoxItems = item.teamAssignments.boxes.filter(box =>
-        box.box_name !== "N/A" && box.box_name !== "" && box.quantity);
+        // Fill basic order info (keeping current order number)
+        setDispatcherName(orderData.dispatcher_name || "");
+        setCustomerName(orderData.customer_name || "");
 
-      const validPumpItems = item.teamAssignments.pumps.filter(pump =>
-        pump.pump_name !== "N/A" && pump.pump_name !== "" && pump.quantity);
+        // Transform and set order items
+        const transformedItems = orderData.items.map((item, index) => {
+          // Helper function to create default item structure
+          const createDefaultItem = (type) => {
+            const defaults = {
+              glass: {
+                glass_name: "N/A",
+                quantity: "",
+                weight: "",
+                neck_size: "",
+                decoration: "N/A",
+                decoration_no: "",
+                team: "Glass Manufacturing - Mumbai",
+                status: "Pending",
+                team_tracking: {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              },
+              caps: {
+                cap_name: "N/A",
+                neck_size: "",
+                quantity: "",
+                process: "N/A",
+                material: "N/A",
+                team: "Cap Manufacturing - Delhi",
+                status: "Pending",
+                team_tracking: {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              },
+              boxes: {
+                box_name: "N/A",
+                quantity: "",
+                approval_code: "",
+                team: "Box Manufacturing - Pune",
+                status: "Pending",
+                team_tracking: {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              },
+              pumps: {
+                pump_name: "N/A",
+                neck_type: "N/A",
+                quantity: "",
+                team: "Pump Manufacturing - Chennai",
+                status: "Pending",
+                team_tracking: {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }
+            };
+            return defaults[type];
+          };
 
-      if (validGlassItems.length > 0 || validCapItems.length > 0 ||
-        validBoxItems.length > 0 || validPumpItems.length > 0) {
-        hasValidItems = true;
+          // Process glass items
+          const glassItems = item.glass && item.glass.length > 0
+            ? item.glass.map(glass => ({
+              glass_name: glass.glass_name || "N/A",
+              quantity: glass.quantity?.toString() || "",
+              weight: glass.weight || "",
+              neck_size: glass.neck_size || "",
+              decoration: glass.decoration || "N/A",
+              decoration_no: glass.decoration_no || "",
+              team: glass.team || "Glass Manufacturing - Mumbai",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            }))
+            : [createDefaultItem('glass')];
 
-        formattedItems.push({
-          name: item.name,
-          glass: validGlassItems.map(glass => ({
-            glass_name: glass.glass_name,
-            quantity: parseInt(glass.quantity, 10) || 0,
-            weight: glass.weight || '',
-            neck_size: glass.neck_size || '',
-            decoration: glass.decoration || '',
-            decoration_no: glass.decoration_no || '',
-            decoration_details: {
-              type: glass.decoration || '',
-              decoration_number: glass.decoration_no || ''
-            },
-            team: glass.team || 'Glass Manufacturing - Mumbai',
-            status: 'Pending',
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: 'Pending'
+          const capItems = item.caps && item.caps.length > 0
+            ? item.caps.map(cap => ({
+              cap_name: cap.cap_name || "N/A",
+              neck_size: cap.neck_size || "",
+              quantity: cap.quantity?.toString() || "",
+              process: cap.process || "N/A",
+              material: cap.material || "N/A",
+              team: cap.team || "Cap Manufacturing - Delhi",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            }))
+            : [createDefaultItem('caps')];
+
+
+          const boxItems = item.boxes && item.boxes.length > 0
+            ? item.boxes.map(box => ({
+              box_name: box.box_name || "N/A",
+              quantity: box.quantity?.toString() || "",
+              approval_code: box.approval_code || "",
+              team: box.team || "Box Manufacturing - Pune",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            }))
+            : [createDefaultItem('boxes')];
+
+          // Process pump items
+          const pumpItems = item.pumps && item.pumps.length > 0
+            ? item.pumps.map(pump => ({
+              pump_name: pump.pump_name || "N/A",
+              neck_type: pump.neck_type || "N/A",
+              quantity: pump.quantity?.toString() || "",
+              team: pump.team || "Pump Manufacturing - Chennai",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            }))
+            : [createDefaultItem('pumps')];
+
+          return {
+            name: item.name || `Item ${index + 1}`,
+            teamAssignments: {
+              glass: glassItems,
+              caps: capItems,
+              boxes: boxItems,
+              pumps: pumpItems
             }
-          })),
-          caps: validCapItems.map(cap => ({
-            cap_name: cap.cap_name,
-            neck_size: cap.neck_size || '',
-            quantity: parseInt(cap.quantity, 10) || 0,
-            process: cap.process || '',
-            material: cap.material || '',
-            team: cap.team || 'Cap Manufacturing - Delhi',
-            status: 'Pending',
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: 'Pending'
-            }
-          })),
-          boxes: validBoxItems.map(box => ({
-            box_name: box.box_name,
-            quantity: parseInt(box.quantity, 10) || 0,
-            approval_code: box.approval_code || '',
-            team: box.team || 'Box Manufacturing - Pune',
-            status: 'Pending',
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: 'Pending'
-            }
-          })),
-          pumps: validPumpItems.map(pump => ({
-            pump_name: pump.pump_name,
-            neck_type: pump.neck_type || '',
-            quantity: parseInt(pump.quantity, 10) || 0,
-            team: pump.team || 'Pump Manufacturing - Chennai',
-            status: 'Pending',
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: 'Pending'
-            }
-          }))
+          };
         });
-      }
-    }
 
-    if (!hasValidItems) {
-      setError('Please add at least one valid item with name and quantity in any team');
-      setIsSubmitting(false);
-      return;
-    }
+        setOrderItems(transformedItems);
 
-    const orderData = {
-      order_number: orderNumber.trim(),
-      dispatcher_name: dispatcherName.trim(),
-      customer_name: customerName.trim(),
-      order_status: 'Pending',
-      items: formattedItems
-    };
+        // Update search states to show selected values
+        const newGlassSearches = {};
+        const newCapSearches = {};
+        const newBoxSearches = {};
+        const newPumpSearches = {};
 
-  
-    // const response = await axios.post("https://pg-backend-udfn.onrender.com/api/orders", orderData);
-    const response = await axios.post("http://localhost:5000/api/orders", orderData);
+        transformedItems.forEach((item, itemIndex) => {
+          item.teamAssignments.glass.forEach((glass, glassIndex) => {
+            if (glass.glass_name !== "N/A") {
+              newGlassSearches[`${itemIndex}-${glassIndex}`] = glass.glass_name;
+            }
+          });
+          item.teamAssignments.caps.forEach((cap, capIndex) => {
+            if (cap.cap_name !== "N/A") {
+              newCapSearches[`${itemIndex}-${capIndex}`] = cap.cap_name;
+            }
+          });
+          item.teamAssignments.boxes.forEach((box, boxIndex) => {
+            if (box.box_name !== "N/A") {
+              newBoxSearches[`${itemIndex}-${boxIndex}`] = box.box_name;
+            }
+          });
+          item.teamAssignments.pumps.forEach((pump, pumpIndex) => {
+            if (pump.pump_name !== "N/A") {
+              newPumpSearches[`${itemIndex}-${pumpIndex}`] = pump.pump_name;
+            }
+          });
+        });
 
-    if (response.data.success) {
-      const newOrder = response.data.data;
-      console.log(newOrder);
-      
-      addOrderToLocalStorage(newOrder);
-      
-      if (isConnected && notifyTeam) {
-        const notificationSent = notifyTeam(newOrder);
-        
-        if (notificationSent) {
-          console.log('✅ Teams notified successfully about new order');
-          
-        } else {
-          console.warn('⚠️ Order created but team notification failed');
-        }
+        setGlassSearches(newGlassSearches);
+        setCapSearches(newCapSearches);
+        setBoxSearches(newBoxSearches);
+        setPumpSearches(newPumpSearches);
+
+        setShowDuplicateSection(false);
+        setDuplicateOrderNumber("");
+
       } else {
-        console.warn('⚠️ Socket not connected, teams will not receive real-time notification');
-        
+        setDuplicateError("Order not found with this number");
+      }
+    } catch (error) {
+      console.error('Error fetching order:', error);
+      setDuplicateError(error.response?.data?.message || "Error fetching order data");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      if (!orderNumber || !dispatcherName || !customerName) {
+        setError('Please fill in all required fields: order number, dispatcher name, and customer name');
+        setIsSubmitting(false);
+        return;
       }
 
-      if (onCreateOrder) {
-        onCreateOrder();
+      let hasValidItems = false;
+      const formattedItems = [];
+
+      for (const item of orderItems) {
+        const validGlassItems = item.teamAssignments.glass.filter(glass =>
+          glass.glass_name !== "N/A" && glass.glass_name !== "" && glass.quantity);
+
+        const validCapItems = item.teamAssignments.caps.filter(cap =>
+          cap.cap_name !== "N/A" && cap.cap_name !== "" && cap.quantity);
+
+        const validBoxItems = item.teamAssignments.boxes.filter(box =>
+          box.box_name !== "N/A" && box.box_name !== "" && box.quantity);
+
+        const validPumpItems = item.teamAssignments.pumps.filter(pump =>
+          pump.pump_name !== "N/A" && pump.pump_name !== "" && pump.quantity);
+
+        if (validGlassItems.length > 0 || validCapItems.length > 0 ||
+          validBoxItems.length > 0 || validPumpItems.length > 0) {
+          hasValidItems = true;
+
+          formattedItems.push({
+            name: item.name,
+            glass: validGlassItems.map(glass => ({
+              glass_name: glass.glass_name,
+              quantity: parseInt(glass.quantity, 10) || 0,
+              weight: glass.weight || '',
+              neck_size: glass.neck_size || '',
+              decoration: glass.decoration || '',
+              decoration_no: glass.decoration_no || '',
+              decoration_details: {
+                type: glass.decoration || '',
+                decoration_number: glass.decoration_no || ''
+              },
+              team: glass.team || 'Glass Manufacturing - Mumbai',
+              status: 'Pending',
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            caps: validCapItems.map(cap => ({
+              cap_name: cap.cap_name,
+              neck_size: cap.neck_size || '',
+              quantity: parseInt(cap.quantity, 10) || 0,
+              process: cap.process || '',
+              material: cap.material || '',
+              team: cap.team || 'Cap Manufacturing - Delhi',
+              status: 'Pending',
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            boxes: validBoxItems.map(box => ({
+              box_name: box.box_name,
+              quantity: parseInt(box.quantity, 10) || 0,
+              approval_code: box.approval_code || '',
+              team: box.team || 'Box Manufacturing - Pune',
+              status: 'Pending',
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            pumps: validPumpItems.map(pump => ({
+              pump_name: pump.pump_name,
+              neck_type: pump.neck_type || '',
+              quantity: parseInt(pump.quantity, 10) || 0,
+              team: pump.team || 'Pump Manufacturing - Chennai',
+              status: 'Pending',
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            }))
+          });
+        }
       }
 
-      resetForm();
-      onClose();
-      
-    } else {
-      setError('Error creating order: ' + (response.data.message || 'Unknown error'));
+      if (!hasValidItems) {
+        setError('Please add at least one valid item with name and quantity in any team');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const orderData = {
+        order_number: orderNumber.trim(),
+        dispatcher_name: dispatcherName.trim(),
+        customer_name: customerName.trim(),
+        order_status: 'Pending',
+        items: formattedItems
+      };
+
+
+      // const response = await axios.post("https://pg-backend-udfn.onrender.com/api/orders", orderData);
+      const response = await axios.post("http://localhost:5000/api/orders", orderData);
+
+      if (response.data.success) {
+        const newOrder = response.data.data;
+        console.log(newOrder);
+
+        addOrderToLocalStorage(newOrder);
+
+        if (isConnected && notifyTeam) {
+          const notificationSent = notifyTeam(newOrder);
+
+          if (notificationSent) {
+            console.log('✅ Teams notified successfully about new order');
+
+          } else {
+            console.warn('⚠️ Order created but team notification failed');
+          }
+        } else {
+          console.warn('⚠️ Socket not connected, teams will not receive real-time notification');
+
+        }
+
+        if (onCreateOrder) {
+          onCreateOrder();
+        }
+
+        resetForm();
+        onClose();
+
+      } else {
+        setError('Error creating order: ' + (response.data.message || 'Unknown error'));
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error('Order creation error:', error);
+      setError('Error creating order: ' + (error.response?.data?.message || error.message));
       setIsSubmitting(false);
     }
-  } catch (error) {
-    console.error('Order creation error:', error);
-    setError('Error creating order: ' + (error.response?.data?.message || error.message));
-    setIsSubmitting(false);
-  }
-};
+  };
 
   return (
     <Dialog open={true} onClose={onClose} className="relative z-10">
@@ -530,7 +746,87 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                     </div>
                   </DialogTitle>
 
-                  <form onSubmit={handleSubmit} className='mt-4'>
+                  <div className="mt-5">
+                    <div className="bg-[#FFF0E7] p-3 rounded-md">
+                      <div className="flex items-center justify-between ">
+                        <h4 className=" text-orange-800 font-medium">Do you want to duplicate an existing order?</h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDuplicateSection(!showDuplicateSection);
+                            setDuplicateError("");
+                            setDuplicateOrderNumber("");
+                          }}
+                          className={`cursor-pointer flex items-center gap-2 px-2 py-1 rounded-sm transition-colors duration-200 font-medium ${showDuplicateSection
+                              ? "bg-transparent"
+                              : "bg-orange-700 text-white hover:bg-red-900 hover:text-white shadow-md"
+                            }`}
+                        >
+                          {showDuplicateSection ? (
+                            <div className="w-5 h-5 rounded-full border-2 border-red-500 flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </div>
+                          ) : (
+                            "Yes, duplicate order"
+                          )}
+                        </button>
+                      </div>
+
+                      {showDuplicateSection && (
+                        <div className="space-y-4 mt-4">
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                value={duplicateOrderNumber}
+                                onChange={(e) => setDuplicateOrderNumber(e.target.value)}
+                                placeholder="Enter order number to duplicate"
+                                className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                      focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                      placeholder:text-gray-400 z-50"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleDuplicateOrder();
+                                  }
+                                }}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleDuplicateOrder}
+                              disabled={isSearching}
+                              className="px-3 py-2 cursor-pointer bg-orange-700 rounded-sm shadow-md transition-colors duration-200  hover:bg-red-900 text-white font-medium to-[#FFB84D] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                              {isSearching ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                  Searching...
+                                </>
+                              ) : (
+                                <>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                  </svg>
+                                  Search
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {duplicateError && (
+                            <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
+                              {duplicateError}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSubmit} className='mt-6'>
                     <div className="grid grid-cols-1 md:grid-cols-3 bg-[#FFF0E7] gap-6 mb-8">
                       <div className="p-5">
                         <label className="block text-sm font-medium text-orange-600 mb-1">

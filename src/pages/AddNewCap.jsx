@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import AddNewProductChild from '../child/AddNewProductChild.jsx';
 
-const BottleDataManager = () => {
+import AddNewCapChild from '../child/AddNewCapChild.jsx';
+
+const AddNewCap = () => {
   const [bottles, setBottles] = useState([]);
   const [filteredBottles, setFilteredBottles] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,9 +27,7 @@ const BottleDataManager = () => {
     NECK_DIAM: ''
   });
 
-
-
-  const API_BASE = 'http://localhost:5000/api/bottledata';
+  const API_BASE = 'http://localhost:5000/api/capdata';
 
   const fetchBottles = async () => {
     try {
@@ -144,7 +143,7 @@ const BottleDataManager = () => {
       await createBottle(formData);
     }
     setShowAddForm(false);
-    return true; // Success
+    return true; 
   } catch (err) {
     throw new Error(err.message);
   }
@@ -198,7 +197,7 @@ const BottleDataManager = () => {
             setShowAddForm(true);
             setEditingBottle(null);
           }} />
-        New Bottle
+       New Cap
         </button>
 
         <div className="relative">
@@ -228,7 +227,6 @@ const BottleDataManager = () => {
               <tr>
                 <th className="px-2 py-3 text-left text-sm font-medium">Co Item No</th>
                 <th className="px-2 py-3 text-left text-sm font-medium">Formula</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">ML</th>
                 <th className="px-2 py-3 text-left text-sm font-medium">Neck Diam</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Edit</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Delete</th>
@@ -243,10 +241,10 @@ const BottleDataManager = () => {
 
                 return (
                   <tr key={bottle._id} className={rowBgColor}>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.CO_ITEM_NO || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.FORMULA}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.ML || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.NECK_DIAM || '-'}</td>
+                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.CO_ITEM_NO || '-'}</td>
+                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.FORMULA}</td>
+
+                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.NECK_DIAM || '-'}</td>
                     <td className="px-2 py-3">
                       <button
                         onClick={() => handleEdit(bottle)}
@@ -341,7 +339,7 @@ const BottleDataManager = () => {
         </div>
       </div>
 
-      <AddNewProductChild
+      <AddNewCapChild
         isOpen={showAddForm}
         onClose={() => {
           setShowAddForm(false);
@@ -367,4 +365,4 @@ function debounce(func, wait) {
   };
 }
 
-export default BottleDataManager;
+export default AddNewCap;

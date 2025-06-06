@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import AddNewProductChild from '../child/AddNewProductChild.jsx';
 
-const BottleDataManager = () => {
+import AddNewCustomerChild from '../child/AddNewCustomerChild.jsx';
+
+const AddNewCustomers = () => {
   const [bottles, setBottles] = useState([]);
   const [filteredBottles, setFilteredBottles] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,20 +16,15 @@ const BottleDataManager = () => {
 
   // Form state
   const [formData, setFormData] = useState({
-    SUBGROUP1: '',
-    SUBGROUP2: '',
-    CO_ITEM_NO: '',
-    FORMULA: '',
-    ML: '',
-    NECKTYPE: '',
-    CAPACITY: '',
-    SHAPE: '',
-    NECK_DIAM: ''
+    name: "",
+    email: "",
+    shortAddress: "",
+    phoneNumber: ""
   });
 
 
 
-  const API_BASE = 'http://localhost:5000/api/bottledata';
+  const API_BASE = 'http://localhost:5000/api/customer';
 
   const fetchBottles = async () => {
     try {
@@ -132,28 +128,26 @@ const BottleDataManager = () => {
   };
 
   const handleSubmit = async (formData) => {
-  if (!formData.FORMULA.trim()) {
-    throw new Error('Formula is required');
-  }
+    
 
-  try {
-    if (editingBottle) {
-      await updateBottle(editingBottle._id, formData);
-      setEditingBottle(null);
-    } else {
-      await createBottle(formData);
+    try {
+      if (editingBottle) {
+        await updateBottle(editingBottle._id, formData);
+        setEditingBottle(null);
+      } else {
+        await createBottle(formData);
+      }
+      setShowAddForm(false);
+      return true; // Success
+    } catch (err) {
+      throw new Error(err.message);
     }
-    setShowAddForm(false);
-    return true; // Success
-  } catch (err) {
-    throw new Error(err.message);
-  }
-};
+  };
 
   const handleEdit = (bottle) => {
-  setEditingBottle(bottle);
-  setShowAddForm(true);
-}
+    setEditingBottle(bottle);
+    setShowAddForm(true);
+  }
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this bottle?')) {
@@ -181,24 +175,19 @@ const BottleDataManager = () => {
             setShowAddForm(true);
             setEditingBottle(null);
             setFormData({
-              SUBGROUP1: '',
-              SUBGROUP2: '',
-              CO_ITEM_NO: '',
-              FORMULA: '',
-              ML: '',
-              NECKTYPE: '',
-              CAPACITY: '',
-              SHAPE: '',
-              NECK_DIAM: ''
+             name: "",
+    email: "",
+    shortAddress: "",
+    phoneNumber: ""
             });
           }}
-         className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
+          className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
         >
           <Plus size={16} onClick={() => {
             setShowAddForm(true);
             setEditingBottle(null);
           }} />
-        New Bottle
+          New Custmer
         </button>
 
         <div className="relative">
@@ -226,10 +215,10 @@ const BottleDataManager = () => {
           <table className="w-full min-w-full rounded-full">
             <thead className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] text-center font-bold text-sm text-white sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-3 text-left text-sm font-medium">Co Item No</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">Formula</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">ML</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">Neck Diam</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Name</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Email</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Phone No</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Address</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Edit</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Delete</th>
 
@@ -243,10 +232,10 @@ const BottleDataManager = () => {
 
                 return (
                   <tr key={bottle._id} className={rowBgColor}>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.CO_ITEM_NO || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.FORMULA}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.ML || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-[#703800]">{bottle.NECK_DIAM || '-'}</td>
+                    <td className="px-2 py-3 text-sm text-left text-[#703800]">{bottle.name|| '-'}</td>
+                    <td className="px-2 py-3 text-sm text-left text-[#703800]">{bottle.email}</td>
+                    <td className="px-2 py-3 text-sm text-left  text-[#703800]">{bottle.phoneNumber || '-'}</td>
+                    <td className="px-2 py-3 text-sm text-left text-[#703800]">{bottle.shortAddress || '-'}</td>
                     <td className="px-2 py-3">
                       <button
                         onClick={() => handleEdit(bottle)}
@@ -341,7 +330,7 @@ const BottleDataManager = () => {
         </div>
       </div>
 
-      <AddNewProductChild
+      <AddNewCustomerChild
         isOpen={showAddForm}
         onClose={() => {
           setShowAddForm(false);
@@ -367,4 +356,4 @@ function debounce(func, wait) {
   };
 }
 
-export default BottleDataManager;
+export default AddNewCustomers;

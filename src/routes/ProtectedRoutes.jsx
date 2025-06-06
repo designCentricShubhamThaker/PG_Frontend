@@ -25,6 +25,9 @@ const ProtectedRoutes = ({ element, allowedRoles = [], allowedTeams = [], allowe
   if (user.role === 'superadmin') {
     return element; 
   }
+  if (user.role === 'team') {
+    return element; 
+  }
 
   if (hasRoleAccess && hasTeamAccess && hasSubteamAccess) {
     return element;

@@ -15,6 +15,7 @@ import DecoCoatDashboard from './Dashboards/DecoCoatDashboard.jsx';
 import DecoFoilDashbaord from './Dashboards/DecoFoilDashbaord.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import SuperAdminDashboard from './Dashboards/SuperAdminDashboard.jsx';
+import TeamDashbaord from './Dashboards/TeamDashboard.jsx';
 // import LinerDashboard from './Dashboards/LinerDashboard';
 
 const App = () => {
@@ -39,6 +40,10 @@ const App = () => {
             <Route
               path="/admin"
               element={<ProtectedRoutes element={<DispatcherDashboard />} allowedRoles={['admin']} />}
+            />
+            <Route
+              path="/team"
+              element={<ProtectedRoutes element={<TeamDashbaord />} allowedRoles={['team']} />}
             />
 
             <Route

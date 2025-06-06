@@ -33,7 +33,7 @@ export const AuthProvider = ({ children }) => {
     const checkAuthStatus = () => {
       const storedUser = localStorage.getItem('user');
       const storedToken = localStorage.getItem('token');
-      
+
       if (storedUser && storedToken) {
         try {
           const parsedUser = JSON.parse(storedUser);
@@ -44,41 +44,43 @@ export const AuthProvider = ({ children }) => {
           localStorage.removeItem('token');
         }
       }
-      
+
       setIsLoading(false);
     };
 
     checkAuthStatus();
   }, []);
 
-useEffect(() => {
-  if (user && !isLoading) {
-    if (user.role === 'superadmin') {
-      navigate('/superadmin');
-    } else if (user.role === 'admin') {
-      navigate('/admin');
-    } else if (user.role === 'user') {
-      if (user.subteam) {
-        navigate(`/dashboard/${user.team}/${user.subteam}`);
-      } else {
-        navigate(`/dashboard/${user.team}`);
+  useEffect(() => {
+    if (user && !isLoading) {
+      if (user.role === 'superadmin') {
+        navigate('/superadmin');
+      } else if (user.role === 'admin') {
+        navigate('/admin');
+      } else if (user.role === "team") {
+        navigate('/team');
+      } else if (user.role === 'user') {
+        if (user.subteam) {
+          navigate(`/dashboard/${user.team}/${user.subteam}`);
+        } else {
+          navigate(`/dashboard/${user.team}`);
+        }
       }
     }
-  }
-}, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate]);
 
 
   const login = async (username, password) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const userData = await loginUser(username, password);
-      
+
       if (!userData || !userData.role) {
         throw new Error('Invalid user data received from server');
       }
-      
+
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', userData.token || '');
 

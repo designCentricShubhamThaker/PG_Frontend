@@ -7,6 +7,11 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 import AddNewBottle from '../pages/AddNewBottle.jsx';
+import AddNewCap from '../pages/AddNewCap.jsx';
+import AddNewPump from '../pages/AddNewPump.jsx';
+import AddNewBox from '../pages/AddNewBox.jsx';
+import AddNewAccessories from '../pages/AddNewAccessories.jsx';
+import AddNewCustomers from '../pages/AddCustomers.jsx';
 
 
 const DispatcherDashboard = () => {
@@ -52,10 +57,10 @@ const DispatcherDashboard = () => {
 
   const menuItems = [
     { id: 'dashboard', label: 'DASHBOARD', type: 'single' },
-    { 
-      id: 'customers', 
-      label: 'ADD CUSTOMERS', 
-      type: 'single' 
+    {
+      id: 'customers',
+      label: 'ADD CUSTOMERS',
+      type: 'single'
     },
     {
       id: 'products',
@@ -74,7 +79,7 @@ const DispatcherDashboard = () => {
   const renderMenuItem = (item, isMobileView = false) => {
     if (item.type === 'parent') {
       const isExpanded = expandedMenus[item.id];
-      
+
       return (
         <li key={item.id} className="mb-1">
           <button
@@ -83,12 +88,12 @@ const DispatcherDashboard = () => {
               text-black font-bold hover:bg-orange-400 hover:text-white`}
           >
             <span>{item.label}</span>
-            {isExpanded ? 
-              <ChevronDown size={16} className="ml-2" /> : 
+            {isExpanded ?
+              <ChevronDown size={16} className="ml-2" /> :
               <ChevronRight size={16} className="ml-2" />
             }
           </button>
-          
+
           {isExpanded && (
             <ul className="ml-4 mt-1 space-y-1">
               {item.children.map((child) => (
@@ -113,7 +118,7 @@ const DispatcherDashboard = () => {
         </li>
       );
     }
-    
+
     return (
       <li key={item.id} className="mb-1">
         <button
@@ -156,20 +161,30 @@ const DispatcherDashboard = () => {
       case 'dashboard':
         return <DispatcherInventoryDashboard />;
       case 'customers':
-        return <div className="text-center text-gray-500 mt-8">Add Customers Component</div>;
+        return <div className="text-center text-gray-500 ">
+          <AddNewCustomers />
+        </div>;
       case 'bottle':
         return <div>
           <AddNewBottle />
         </div>;
       case 'caps':
-        return <div className="text-center text-gray-500 mt-8">Add Caps Component</div>;
+        return <div className="text-center text-gray-500 ">
+          <AddNewCap />
+        </div>;
       case 'pumps':
-        return <div className="text-center text-gray-500 mt-8">Add Pumps Component</div>;
+        return <div className="text-center text-gray-500 ">
+          <AddNewPump />
+        </div>;
       case 'boxes':
-        return <div className="text-center text-gray-500 mt-8">Add Boxes Component</div>;
+        return <div className="text-center text-gray-500">
+          <AddNewBox />
+        </div>;
       case 'accessories':
-        return <div className="text-center text-gray-500 mt-8">Add Accessories Component</div>;
-      
+        return <div className="text-center text-gray-500">
+          <AddNewAccessories />
+        </div>;
+
     }
   };
 
@@ -220,10 +235,11 @@ const DispatcherDashboard = () => {
           </div>
         </header>
         <main className="flex-1 p-4 overflow-hidden">
-          <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
+          <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col overflow-y-auto">
             {renderContent()}
           </div>
         </main>
+
       </div>
     </div>
   );
