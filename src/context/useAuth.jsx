@@ -76,6 +76,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const userData = await loginUser(username, password);
+      
 
       if (!userData || !userData.role) {
         throw new Error('Invalid user data received from server');
@@ -83,6 +84,7 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', userData.token || '');
+   
 
       setUser(userData);
       return userData;
