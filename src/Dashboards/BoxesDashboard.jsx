@@ -8,15 +8,14 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
+import BoxOrders from '../pages/BoxOrders.jsx';
 
-import TeamOrders from '../pages/TeamOrders.jsx';
-
-const DecoFrostDashbaord = () => {
+const BoxesDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout , user } = useAuth();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -134,7 +133,7 @@ const DecoFrostDashbaord = () => {
               </button>
             ) : null}
             <div className="text-xl font-bold">
-              <span className="text-black">Welcome</span> <span className="text-orange-500">{user.username} !</span>
+              <span className="text-black">Welcome</span> <span className="text-orange-500">Box Team !</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -149,9 +148,9 @@ const DecoFrostDashbaord = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <TeamOrders orderType="pending" />
+             <BoxOrders orderType="pending" />
             ) : (
-             <TeamOrders orderType="completed"/>
+             <BoxOrders orderType="completed"/>
             )}
           </div>
         </main>
@@ -160,4 +159,4 @@ const DecoFrostDashbaord = () => {
   );
 };
 
-export default DecoFrostDashbaord;
+export default BoxesDashboard;

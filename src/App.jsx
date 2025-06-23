@@ -7,7 +7,7 @@ import DispatcherDashboard from './Dashboards/DispatcherDashboard.jsx';
 import CapDashboard from './Dashboards/CapDashboard.jsx';
 import GlassDashboard from './Dashboards/GlassDashboard.jsx';
 import PumpDashboard from './Dashboards/PumpDashboard.jsx';
-import BoxDashboard from './Dashboards/BoxDashboard.jsx';
+import BoxesDashboard from './Dashboards/BoxesDashboard.jsx';
 import StickerDashboard from './Dashboards/StickerDashboard.jsx';
 import DecoPrintDashboard from './Dashboards/DecoPrintDashboard.jsx';
 import DecoFrostDashboard from './Dashboards/DecoFrostDashboard.jsx';
@@ -55,21 +55,14 @@ const App = () => {
               element={<ProtectedRoutes element={<CapDashboard />} allowedRoles={['user']} allowedTeams={['cap']} />}
             />
             <Route
-              path="/dashboard/pump"
-              element={<ProtectedRoutes element={<PumpDashboard />} allowedRoles={['user']} allowedTeams={['pump']} />}
+              path="/dashboard/pumps"
+              element={<ProtectedRoutes element={<PumpDashboard />} allowedRoles={['user']} allowedTeams={['pumps']} />}
             />
             <Route
-              path="/dashboard/box"
-              element={<ProtectedRoutes element={<BoxDashboard />} allowedRoles={['user']} allowedTeams={['box']} />}
+              path="/dashboard/boxes"
+              element={<ProtectedRoutes element={<BoxesDashboard />} allowedRoles={['user']} allowedTeams={['boxes']} />}
             />
-            <Route
-              path="/dashboard/sticker"
-              element={<ProtectedRoutes element={<StickerDashboard />} allowedRoles={['user']} allowedTeams={['sticker']} />}
-            />
-            {/* <Route 
-            path="/dashboard/liner" 
-            element={<ProtectedRoutes element={<LinerDashboard />} allowedRoles={['user']} allowedTeams={['liner']} />}
-          /> */}
+         
 
             <Route
               path="/dashboard/decoration/deco_print"

@@ -7,13 +7,12 @@ import { CapData } from '../data/CapData.js';
 import { glassData } from '../data/GlassData.js';
 import { boxData } from "../data/boxData.js"
 import { pumpData } from "../data/pumpData.js"
-import { addOrderToLocalStorage } from '../utils/localStorageUtils.jsx';
-import { resetForm } from '../utils/resetForm.jsx';
+import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
-import { handleDuplicateOrder } from '../utils/orderHelpers.jsx';
-import { handleSubmitOrder } from '../utils/orderSubmit.jsx';
+import { toast } from 'react-hot-toast';
 
-const CreateOrderChild = ({ onClose, onCreateOrder }) => {
+
+const UpdateTeamOrderChild = ({ onClose, order, onUpdateOrder }) => {
   const [orderNumber, setOrderNumber] = useState("");
   const [dispatcherName, setDispatcherName] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -29,207 +28,240 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const [capSearches, setCapSearches] = useState({});
   const [boxSearches, setBoxSearches] = useState({});
   const [pumpSearches, setPumpSearches] = useState({});
+
   const [isDropdownVisible, setIsDropdownVisible] = useState(null);
-  const [showDuplicateSection, setShowDuplicateSection] = useState(false);
-  const [duplicateOrderNumber, setDuplicateOrderNumber] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [duplicateError, setDuplicateError] = useState("");
-  const customers = ["Amit Verma", "Priya Patel", "Rohan Singh", "Neha Gupta", "Vikram Iyer", "Sunita Nair", "Arjun Malhotra", "Deepa Joshi"];
-  const DECORATION_COMBINATIONS = [
-    { key: 'coating', label: 'COATING' },
-    { key: 'coating_printing', label: 'COATING + PRINTING' },
-    { key: 'coating_printing_foiling', label: 'COATING + PRINTING + FOILING' },
-    { key: 'printing', label: 'PRINTING' },
-    { key: 'printing_foiling', label: 'PRINTING + FOILING' },
-    { key: 'foiling', label: 'FOILING' },
-    { key: 'coating_foiling', label: 'COATING + FOILING' },
-    { key: 'frosting', label: 'FROSTING' },
-    { key: 'frosting_printing', label: 'FROSTING + PRINTING' },
-    { key: 'frosting_printing_foiling', label: 'FROSTING + PRINTING + FOILING' }
+
+  const customers = [
+    "Amit Verma",
+    "Priya Patel",
+    "Rohan Singh",
+    "Neha Gupta",
+    "Vikram Iyer",
+    "Sunita Nair",
+    "Arjun Malhotra",
+    "Deepa Joshi"
   ];
 
+  const decorationOptions = ["Printing", "Coating", "Frosting", "None"];
   const capProcessOptions = ["Spraying", "Assembly", "Polishing", "None"];
   const capMaterialOptions = ["Plastic", "Metal", "Wood", "Ceramic"];
   const pumpNeckTypeOptions = ["Standard", "Wide", "Narrow", "Custom"];
-  const [exchangeRates, setExchangeRates] = useState({
-    USD: 0,
-    EUR: 0,
-    GBP: 0
-  });
-  const [isLoadingRates, setIsLoadingRates] = useState(false);
 
-  const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setBoxSearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
-
-  const [orderItems, setOrderItems] = useState([
-    {
-      name: "Item 1",
-      teamAssignments: {
-        glass: [
-          {
-            glass_name: "N/A",
-            quantity: "",
-            weight: "",
-            neck_size: "",
-            decoration: "N/A",
-            decoration_no: "",
-            team: "Glass Manufacturing - Mumbai",
-            status: "Pending",
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: "Pending"
-            }
-          }
-        ],
-        caps: [
-          {
-            cap_name: "N/A",
-            neck_size: "",
-            quantity: "",
-            process: "N/A",
-            material: "N/A",
-            team: "Cap Manufacturing - Delhi",
-            status: "Pending",
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: "Pending"
-            }
-          }
-        ],
-        boxes: [
-          {
-            box_name: "N/A",
-            quantity: "",
-            approval_code: "",
-            team: "Box Manufacturing - Pune",
-            status: "Pending",
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: "Pending"
-            }
-          }
-        ],
-        pumps: [
-          {
-            pump_name: "N/A",
-            neck_type: "N/A",
-            quantity: "",
-            team: "Pump Manufacturing - Chennai",
-            status: "Pending",
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: "Pending"
-            }
-          }
-        ]
-      }
-    }
-  ]);
-
+  const [orderItems, setOrderItems] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  console.log(order);
 
-  const { notifyTeam, isConnected } = useSocket();
+  const { notifyOrderEdit } = useSocket()
 
-  const fetchExchangeRates = async () => {
-    setIsLoadingRates(true);
-    try {
-      const response = await fetch('https://api.exchangerate-api.com/v4/latest/INR');
-      const data = await response.json();
-      setExchangeRates({
-        USD: data.rates.USD || 0,
-        EUR: data.rates.EUR || 0,
-        GBP: data.rates.GBP || 0
-      });
-    } catch (error) {
-      console.error('Failed to fetch exchange rates:', error);
-      // Fallback rates (approximate)
-      setExchangeRates({
-        USD: 0.012,
-        EUR: 0.011,
-        GBP: 0.0095
-      });
-    } finally {
-      setIsLoadingRates(false);
-    }
+
+  const createDefaultTeamAssignment = (team) => {
+    const defaults = {
+      glass: {
+        glass_name: "N/A",
+        quantity: "",
+        weight: "",
+        neck_size: "",
+        decoration: "N/A",
+        decoration_no: "",
+        team: "Glass Manufacturing - Mumbai",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      },
+      caps: {
+        cap_name: "N/A",
+        neck_size: "",
+        quantity: "",
+        process: "N/A",
+        material: "N/A",
+        team: "Cap Manufacturing - Delhi",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      },
+      boxes: {
+        box_name: "N/A",
+        quantity: "",
+        approval_code: "",
+        team: "Box Manufacturing - Pune",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      },
+      pumps: {
+        pump_name: "N/A",
+        neck_type: "N/A",
+        quantity: "",
+        team: "Pump Manufacturing - Chennai",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      }
+    };
+    return defaults[team];
   };
 
   useEffect(() => {
-    fetchExchangeRates();
-  }, []);
+    if (order) {
+      setOrderNumber(order.order_number || "");
+      setDispatcherName(order.dispatcher_name || "");
+      setCustomerName(order.customer_name || "");
 
-  const calculateItemPrice = (item) => {
-    let totalPrice = 0;
+      const transformedItems = [];
 
-    item.teamAssignments.glass.forEach(glass => {
-      const qty = parseFloat(glass.quantity) || 0;
-      const rate = parseFloat(glass.rate) || 0;
-      totalPrice += (qty * rate) / 1000;
-    });
+      const itemsToProcess = order.item_ids || [];
 
+      if (Array.isArray(itemsToProcess) && itemsToProcess.length > 0) {
+        itemsToProcess.forEach((item, index) => {
+          const transformedItem = {
+            name: item.name || `Item ${index + 1}`,
+            teamAssignments: {
+              glass: [],
+              caps: [],
+              boxes: [],
+              pumps: []
+            }
+          };
 
-    item.teamAssignments.caps.forEach(cap => {
-      const qty = parseFloat(cap.quantity) || 0;
-      const rate = parseFloat(cap.rate) || 0;
-      totalPrice += (qty * rate) / 1000;
-    });
+          if (item.team_assignments) {
+            // Handle Glass assignments
+            if (item.team_assignments.glass && Array.isArray(item.team_assignments.glass) && item.team_assignments.glass.length > 0) {
+              transformedItem.teamAssignments.glass = item.team_assignments.glass.map(glass => ({
+                glass_name: glass.glass_name || "N/A",
+                quantity: glass.quantity?.toString() || "",
+                weight: glass.weight || "",
+                neck_size: glass.neck_size || "",
+                decoration: glass.decoration || glass.decoration_details?.type || "N/A",
+                decoration_no: glass.decoration_no || glass.decoration_details?.decoration_number || "",
+                team: glass.team || "Glass Manufacturing - Mumbai",
+                status: glass.status || "Pending",
+                team_tracking: glass.team_tracking || {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }));
+            } else {
+              transformedItem.teamAssignments.glass = [createDefaultTeamAssignment('glass')];
+            }
 
-    item.teamAssignments.boxes.forEach(box => {
-      const qty = parseFloat(box.quantity) || 0;
-      const rate = parseFloat(box.rate) || 0;
-      totalPrice += (qty * rate) / 1000;
-    });
+            if (item.team_assignments.caps && Array.isArray(item.team_assignments.caps) && item.team_assignments.caps.length > 0) {
+              transformedItem.teamAssignments.caps = item.team_assignments.caps.map(cap => ({
+                cap_name: cap.cap_name || "N/A",
+                neck_size: cap.neck_size || "",
+                quantity: cap.quantity?.toString() || "",
+                process: cap.process || "N/A",
+                material: cap.material || "N/A",
+                team: cap.team || "Cap Manufacturing - Delhi",
+                status: cap.status || "Pending",
+                team_tracking: cap.team_tracking || {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }));
+            } else {
+              transformedItem.teamAssignments.caps = [createDefaultTeamAssignment('caps')];
+            }
 
-    item.teamAssignments.pumps.forEach(pump => {
-      const qty = parseFloat(pump.quantity) || 0;
-      const rate = parseFloat(pump.rate) || 0;
-      totalPrice += (qty * rate) / 1000;
-    });
+            if (item.team_assignments.boxes && Array.isArray(item.team_assignments.boxes) && item.team_assignments.boxes.length > 0) {
+              transformedItem.teamAssignments.boxes = item.team_assignments.boxes.map(box => ({
+                box_name: box.box_name || "N/A",
+                quantity: box.quantity?.toString() || "",
+                approval_code: box.approval_code || "",
+                team: box.team || "Box Manufacturing - Pune",
+                status: box.status || "Pending",
+                team_tracking: box.team_tracking || {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }));
+            } else {
+              transformedItem.teamAssignments.boxes = [createDefaultTeamAssignment('boxes')];
+            }
 
-    return totalPrice;
-  };
+            if (item.team_assignments.pumps && Array.isArray(item.team_assignments.pumps) && item.team_assignments.pumps.length > 0) {
+              transformedItem.teamAssignments.pumps = item.team_assignments.pumps.map(pump => ({
+                pump_name: pump.pump_name || "N/A",
+                neck_type: pump.neck_type || "N/A",
+                quantity: pump.quantity?.toString() || "",
+                team: pump.team || "Pump Manufacturing - Chennai",
+                status: pump.status || "Pending",
+                team_tracking: pump.team_tracking || {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }));
+            } else {
+              transformedItem.teamAssignments.pumps = [createDefaultTeamAssignment('pumps')];
+            }
+          }
 
-  const calculateTotalOrderPrice = () => {
-    return orderItems.reduce((total, item) => total + calculateItemPrice(item), 0);
-  };
+          transformedItems.push(transformedItem);
+        });
+      } else {
 
+        transformedItems.push({
+          name: "Item 1",
+          teamAssignments: {
+            glass: [createDefaultTeamAssignment('glass')],
+            caps: [createDefaultTeamAssignment('caps')],
+            boxes: [createDefaultTeamAssignment('boxes')],
+            pumps: [createDefaultTeamAssignment('pumps')]
+          }
+        });
+      }
 
-  const PriceDisplay = ({ priceINR, label = "Price" }) => {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-        <h5 className="text-sm font-medium text-green-800 mb-2">{label}</h5>
-        <div className="space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-green-700">₹ INR:</span>
-            <span className="font-semibold text-green-800">
-              {priceINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">$ USD:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.USD).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">€ EUR:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.EUR).toLocaleString('en-DE', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">£ GBP:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.GBP).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
+      setOrderItems(transformedItems);
 
+      const initialGlassSearches = {};
+      const initialCapSearches = {};
+      const initialBoxSearches = {};
+      const initialPumpSearches = {};
+
+      transformedItems.forEach((item, itemIndex) => {
+        item.teamAssignments.glass.forEach((glass, glassIndex) => {
+          if (glass.glass_name && glass.glass_name !== "N/A") {
+            initialGlassSearches[`${itemIndex}-${glassIndex}`] = glass.glass_name;
+          }
+        });
+        item.teamAssignments.caps.forEach((cap, capIndex) => {
+          if (cap.cap_name && cap.cap_name !== "N/A") {
+            initialCapSearches[`${itemIndex}-${capIndex}`] = cap.cap_name;
+          }
+        });
+        item.teamAssignments.boxes.forEach((box, boxIndex) => {
+          if (box.box_name && box.box_name !== "N/A") {
+            initialBoxSearches[`${itemIndex}-${boxIndex}`] = box.box_name;
+          }
+        });
+        item.teamAssignments.pumps.forEach((pump, pumpIndex) => {
+          if (pump.pump_name && pump.pump_name !== "N/A") {
+            initialPumpSearches[`${itemIndex}-${pumpIndex}`] = pump.pump_name;
+          }
+        });
+      });
+
+      setGlassSearches(initialGlassSearches);
+      setCapSearches(initialCapSearches);
+      setBoxSearches(initialBoxSearches);
+      setPumpSearches(initialPumpSearches);
+    }
+  }, [order]);
 
   const addOrderItem = () => {
     const newItemNumber = orderItems.length + 1;
@@ -238,67 +270,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
       {
         name: `Item ${newItemNumber}`,
         teamAssignments: {
-          glass: [
-            {
-              glass_name: "N/A",
-              quantity: "",
-              weight: "",
-              neck_size: "",
-              decoration: "N/A",
-              decoration_no: "",
-              team: "Glass Manufacturing - Mumbai",
-              status: "Pending",
-              team_tracking: {
-                total_completed_qty: 0,
-                completed_entries: [],
-                status: "Pending"
-              }
-            }
-          ],
-          caps: [
-            {
-              cap_name: "N/A",
-              neck_size: "",
-              quantity: "",
-              process: "N/A",
-              material: "N/A",
-              team: "Cap Manufacturing - Delhi",
-              status: "Pending",
-              team_tracking: {
-                total_completed_qty: 0,
-                completed_entries: [],
-                status: "Pending"
-              }
-            }
-          ],
-          boxes: [
-            {
-              box_name: "N/A",
-              quantity: "",
-              approval_code: "",
-              team: "Box Manufacturing - Pune",
-              status: "Pending",
-              team_tracking: {
-                total_completed_qty: 0,
-                completed_entries: [],
-                status: "Pending"
-              }
-            }
-          ],
-          pumps: [
-            {
-              pump_name: "N/A",
-              neck_type: "N/A",
-              quantity: "",
-              team: "Pump Manufacturing - Chennai",
-              status: "Pending",
-              team_tracking: {
-                total_completed_qty: 0,
-                completed_entries: [],
-                status: "Pending"
-              }
-            }
-          ]
+          glass: [createDefaultTeamAssignment('glass')],
+          caps: [createDefaultTeamAssignment('caps')],
+          boxes: [createDefaultTeamAssignment('boxes')],
+          pumps: [createDefaultTeamAssignment('pumps')]
         }
       }
     ]);
@@ -313,66 +288,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
   const addTeamAssignment = (itemIndex, team) => {
     const updatedItems = [...orderItems];
-
-    if (team === 'glass') {
-      updatedItems[itemIndex].teamAssignments.glass.push({
-        glass_name: "N/A",
-        quantity: "",
-        weight: "",
-        neck_size: "",
-        decoration: "N/A",
-        decoration_no: "",
-        team: "Glass Manufacturing - Mumbai",
-        status: "Pending",
-        team_tracking: {
-          total_completed_qty: 0,
-          completed_entries: [],
-          status: "Pending"
-        }
-      });
-    } else if (team === 'caps') {
-      updatedItems[itemIndex].teamAssignments.caps.push({
-        cap_name: "N/A",
-        neck_size: "",
-        quantity: "",
-        process: "N/A",
-        material: "N/A",
-        team: "Cap Manufacturing - Delhi",
-        status: "Pending",
-        team_tracking: {
-          total_completed_qty: 0,
-          completed_entries: [],
-          status: "Pending"
-        }
-      });
-    } else if (team === 'boxes') {
-      updatedItems[itemIndex].teamAssignments.boxes.push({
-        box_name: "N/A",
-        quantity: "",
-        approval_code: "",
-        team: "Box Manufacturing - Pune",
-        status: "Pending",
-        team_tracking: {
-          total_completed_qty: 0,
-          completed_entries: [],
-          status: "Pending"
-        }
-      });
-    } else if (team === 'pumps') {
-      updatedItems[itemIndex].teamAssignments.pumps.push({
-        pump_name: "N/A",
-        neck_type: "N/A",
-        quantity: "",
-        team: "Pump Manufacturing - Chennai",
-        status: "Pending",
-        team_tracking: {
-          total_completed_qty: 0,
-          completed_entries: [],
-          status: "Pending"
-        }
-      });
-    }
-
+    updatedItems[itemIndex].teamAssignments[team].push(createDefaultTeamAssignment(team));
     setOrderItems(updatedItems);
   };
 
@@ -397,7 +313,172 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     setOrderItems(updatedItems);
   };
 
-  const handleSubmit = (e) => handleSubmitOrder({ e, orderNumber, dispatcherName, customerName, orderItems, setIsSubmitting, setError, addOrderToLocalStorage, isConnected, notifyTeam, onCreateOrder, resetForm: () => resetForm(setOrderNumber, setDispatcherName, setCustomerName, setOrderItems), onClose });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      if (!orderNumber || !dispatcherName || !customerName) {
+        setError('Please fill in all required fields: order number, dispatcher name, and customer name');
+        setIsSubmitting(false);
+        return;
+      }
+
+      let hasValidItems = false;
+      const formattedItems = [];
+
+      for (const item of orderItems) {
+        const validGlassItems = item.teamAssignments.glass.filter(glass =>
+          glass.glass_name !== "N/A" && glass.glass_name !== "" && glass.quantity);
+
+        const validCapItems = item.teamAssignments.caps.filter(cap =>
+          cap.cap_name !== "N/A" && cap.cap_name !== "" && cap.quantity);
+
+        const validBoxItems = item.teamAssignments.boxes.filter(box =>
+          box.box_name !== "N/A" && box.box_name !== "" && box.quantity);
+
+        const validPumpItems = item.teamAssignments.pumps.filter(pump =>
+          pump.pump_name !== "N/A" && pump.pump_name !== "" && pump.quantity);
+
+        if (validGlassItems.length > 0 || validCapItems.length > 0 ||
+          validBoxItems.length > 0 || validPumpItems.length > 0) {
+          hasValidItems = true;
+
+          formattedItems.push({
+            name: item.name,
+            glass: validGlassItems.map(glass => ({
+              glass_name: glass.glass_name,
+              quantity: parseInt(glass.quantity, 10) || 0,
+              weight: glass.weight || '',
+              neck_size: glass.neck_size || '',
+              decoration: glass.decoration || '',
+              decoration_no: glass.decoration_no || '',
+              decoration_details: {
+                type: glass.decoration || '',
+                decoration_number: glass.decoration_no || ''
+              },
+              team: glass.team || 'Glass Manufacturing - Mumbai',
+              status: glass.status || 'Pending',
+              team_tracking: glass.team_tracking || {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            caps: validCapItems.map(cap => ({
+              cap_name: cap.cap_name,
+              neck_size: cap.neck_size || '',
+              quantity: parseInt(cap.quantity, 10) || 0,
+              process: cap.process || '',
+              material: cap.material || '',
+              team: cap.team || 'Cap Manufacturing - Delhi',
+              status: cap.status || 'Pending',
+              team_tracking: cap.team_tracking || {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            boxes: validBoxItems.map(box => ({
+              box_name: box.box_name,
+              quantity: parseInt(box.quantity, 10) || 0,
+              approval_code: box.approval_code || '',
+              team: box.team || 'Box Manufacturing - Pune',
+              status: box.status || 'Pending',
+              team_tracking: box.team_tracking || {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            })),
+            pumps: validPumpItems.map(pump => ({
+              pump_name: pump.pump_name,
+              neck_type: pump.neck_type || '',
+              quantity: parseInt(pump.quantity, 10) || 0,
+              team: pump.team || 'Pump Manufacturing - Chennai',
+              status: pump.status || 'Pending',
+              team_tracking: pump.team_tracking || {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
+            }))
+          });
+        }
+      }
+
+      if (!hasValidItems) {
+        setError('Please add at least one valid item with name and quantity in any team');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Store the original order for comparison
+      const previousOrder = { ...order };
+
+      const orderData = {
+        order_number: orderNumber.trim(),
+        dispatcher_name: dispatcherName.trim(),
+        customer_name: customerName.trim(),
+        order_status: order.order_status || 'Pending',
+        items: formattedItems
+      };
+
+      const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/orders/${order._id}`, orderData);
+      // const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
+
+      if (response.data.success) {
+        const updatedOrder = response.data.data;
+
+        const updateSuccess = updateDispatcherOrderInLocalStorage(updatedOrder);
+
+        if (!updateSuccess) {
+          console.warn('Order updated in database but localStorage update failed');
+        }
+
+        // Determine what fields were edited
+        const editedFields = [];
+        if (previousOrder.order_number !== updatedOrder.order_number) editedFields.push('order_number');
+        if (previousOrder.dispatcher_name !== updatedOrder.dispatcher_name) editedFields.push('dispatcher_name');
+        if (previousOrder.customer_name !== updatedOrder.customer_name) editedFields.push('customer_name');
+        if (JSON.stringify(previousOrder.items) !== JSON.stringify(updatedOrder.items)) editedFields.push('items');
+
+
+        if (notifyOrderEdit) {
+          const editData = {
+            updatedOrder,
+            previousOrder,
+            editedFields
+          };
+
+          const notificationSent = notifyOrderEdit(editData);
+          if (!notificationSent) {
+            console.warn('Failed to send socket notification to teams');
+          }
+        } else {
+          console.warn('notifyOrderEdit function not available');
+        }
+
+        if (onUpdateOrder) {
+          onUpdateOrder();
+        }
+
+        onClose();
+
+        console.log('Order updated successfully and teams notified');
+        toast.success("order details updated successfully !")
+
+      } else {
+        setError('Error updating order: ' + (response.data.message || 'Unknown error'));
+        setIsSubmitting(false);
+      }
+    } catch (error) {
+      console.error('Error updating order:', error);
+      setError('Error updating order: ' + (error.response?.data?.message || error.message));
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Dialog open={true} onClose={onClose} className="relative z-10">
@@ -415,92 +496,12 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                   <DialogTitle as="h3">
                     <div className="bg-[#FF6701] p-4 rounded-t-md border-b border-orange-200 shadow-sm text-center">
                       <h3 className="text-white text-xl font-bold flex tracking-wide gap-2">
-                        Create New Order
+                        Update Order
                       </h3>
                     </div>
                   </DialogTitle>
 
-                  <div className="mt-5">
-                    <div className="bg-[#FFF0E7] p-3 rounded-md">
-                      <div className="flex items-center justify-between ">
-                        <h4 className=" text-orange-800 font-medium">Do you want to duplicate an existing order?</h4>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowDuplicateSection(!showDuplicateSection);
-                            setDuplicateError("");
-                            setDuplicateOrderNumber("");
-                          }}
-                          className={`cursor-pointer flex items-center gap-2 px-2 py-1 rounded-sm transition-colors duration-200 font-medium ${showDuplicateSection
-                            ? "bg-transparent"
-                            : "bg-orange-700 text-white hover:bg-red-900 hover:text-white shadow-md"
-                            }`}
-                        >
-                          {showDuplicateSection ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-red-500 flex items-center justify-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </div>
-                          ) : (
-                            "Yes, duplicate order"
-                          )}
-                        </button>
-                      </div>
-
-                      {showDuplicateSection && (
-                        <div className="space-y-4 mt-4">
-                          <div className="flex gap-3">
-                            <div className="flex-1">
-                              <input
-                                type="text"
-                                value={duplicateOrderNumber}
-                                onChange={(e) => setDuplicateOrderNumber(e.target.value)}
-                                placeholder="Enter order number to duplicate"
-                                className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                      focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                      placeholder:text-gray-400 z-50"
-                                onKeyPress={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    onDuplicate();
-                                  }
-                                }}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={onDuplicate}
-                              disabled={isSearching}
-                              className="px-3 py-2 cursor-pointer bg-orange-700 rounded-sm shadow-md transition-colors duration-200  hover:bg-red-900 text-white font-medium to-[#FFB84D] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                            >
-                              {isSearching ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  Searching...
-                                </>
-                              ) : (
-                                <>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                  </svg>
-                                  Search
-                                </>
-                              )}
-                            </button>
-                          </div>
-
-                          {duplicateError && (
-                            <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
-                              {duplicateError}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleSubmit} className='mt-6'>
+                  <form onSubmit={handleSubmit} className='mt-4'>
                     <div className="grid grid-cols-1 md:grid-cols-3 bg-[#FFF0E7] gap-6 mb-8">
                       <div className="p-5">
                         <label className="block text-sm font-medium text-orange-600 mb-1">
@@ -561,7 +562,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                     {orderItems.map((item, itemIndex) => (
                       <div key={`item-${itemIndex}`} className="mb-8 rounded-xl shadow-lg overflow-visible border border-orange-200 relative">
                         <div className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] p-4 flex justify-between items-center">
-                          <div className="flex items-center space-x-4">
+                          <div className="flex items-center">
                             <h3 className="text-lg font-semibold text-white">
                               <input
                                 type="text"
@@ -570,7 +571,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="bg-transparent border-b border-white/50 text-white px-2 py-1 focus:outline-none focus:border-white w-32"
                               />
                             </h3>
-
                           </div>
 
                           <div className="flex items-center space-x-2">
@@ -594,33 +594,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                             )}
                           </div>
                         </div>
-                        <div>
-
-                        </div>
-
-
-                        {calculateItemPrice(item) > 0 && (
-                          <div className="bg-[#FFF0E7]  border-b  border-orange-200 p-6 animate-fade-in">
-                            <div className="flex justify-between items-center">
-                              <h5 className="text-orange-800 font-medium mr-5">
-                                Your Item Total is : ₹ {calculateItemPrice(item).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                              </h5>
-                              <div className="flex items-center space-x-3 text-orange-800 text-sm font-medium">
-                                <span className="transition-all duration-300 hover:text-orange-800 hover:scale-105">
-                                  $ {isLoadingRates ? '...' : (calculateItemPrice(item) * exchangeRates.USD).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                                </span>
-                                <span className="text-orange-300">|</span>
-                                <span className="transition-all duration-300 hover:text-orange-800 hover:scale-105">
-                                  € {isLoadingRates ? '...' : (calculateItemPrice(item) * exchangeRates.EUR).toLocaleString('en-DE', { maximumFractionDigits: 2 })}
-                                </span>
-                                <span className="text-orange-300">|</span>
-                                <span className="transition-all duration-300 hover:text-orange-800 hover:scale-105">
-                                  £ {isLoadingRates ? '...' : (calculateItemPrice(item) * exchangeRates.GBP).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
 
                         <div className="p-6 bg-[#FFF8F3]">
                           <div className="flex items-center mb-4">
@@ -633,9 +606,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 key={`glass-${itemIndex}-${glassIndex}`}
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
-                                <div className="grid grid-cols-12 gap-4 items-end">
-                                  {/* Glass Name - Reduced space */}
-                                  <div className="col-span-4">
+                                <div className="grid grid-cols-12 gap-4">
+                                  <div className="col-span-12 md:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Glass Name</label>
                                     <div className="relative">
                                       <input
@@ -662,8 +634,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredGlassData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                placeholder:text-gray-400 z-50"
+                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                                                            placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -706,94 +678,82 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  {/* Weight */}
-                                  <div className="col-span-1">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Weight</label>
-                                    <input
-                                      type="text"
-                                      value={glass.weight || ""}
-                                      className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium text-center"
-                                      readOnly
-                                    />
-                                  </div>
+                                  <div className="col-span-12 md:col-span-8">
+                                    <div className="grid grid-cols-12 gap-4">
+                                      <div className="col-span-6 md:col-span-2">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Weight</label>
+                                        <input
+                                          type="text"
+                                          value={glass.weight || ""}
+                                          className="w-full px-4 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
+                                          readOnly
+                                        />
+                                      </div>
 
-                                  {/* Neck Size */}
-                                  <div className="col-span-1">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
-                                    <input
-                                      type="text"
-                                      value={glass.neck_size || ""}
-                                      className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium text-center"
-                                      readOnly
-                                    />
-                                  </div>
+                                      <div className="col-span-6 md:col-span-2">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
+                                        <input
+                                          type="text"
+                                          value={glass.neck_size || ""}
+                                          className="w-full px-4 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
+                                          readOnly
+                                        />
+                                      </div>
 
-                                  {/* Decoration - Reduced space */}
-                                  <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Decoration</label>
-                                    <div className="relative">
-                                      <select
-                                        value={glass.decoration || "N/A"}
-                                        onChange={(e) =>
-                                          handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration', e.target.value)
-                                        }
-                                        className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-  focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                      >
-                                        <option value="N/A">Please Select</option>
-                                        {DECORATION_COMBINATIONS.map((combo) => (
-                                          <option key={combo.key} value={combo.key}>
-                                            {combo.label}
-                                          </option>
-                                        ))}
-                                      </select>
+                                      <div className="col-span-12 md:col-span-3">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Decoration</label>
+                                        <div className="relative">
+                                          <select
+                                            value={glass.decoration || "N/A"}
+                                            onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration', e.target.value)}
+                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
+                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                                          >
+                                            <option value="N/A">Please Select</option>
+                                            {decorationOptions
+                                              .filter(name => name !== "N/A")
+                                              .map((name, idx) => (
+                                                <option key={idx} value={name}>
+                                                  {name}
+                                                </option>
+                                              ))}
+                                          </select>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                          >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                          </svg>
+                                        </div>
+                                      </div>
 
-                                      <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                      >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                      </svg>
+                                      <div className="col-span-6 md:col-span-2">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Deco No</label>
+                                        <input
+                                          type="text"
+                                          value={glass.decoration_no || ""}
+                                          onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration_no', e.target.value)}
+                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                        />
+                                      </div>
+
+
+                                      <div className="col-span-6 md:col-span-3">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                        <input
+                                          type="number"
+                                          value={glass.quantity || ""}
+                                          onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'quantity', e.target.value)}
+                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                          min="1"
+                                        />
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="col-span-1">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Deco No</label>
-                                    <input
-                                      type="text"
-                                      value={glass.decoration_no || ""}
-                                      onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration_no', e.target.value)}
-                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                    />
-                                  </div>
-
-                                  <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
-                                    <input
-                                      type="number"
-                                      value={glass.quantity || ""}
-                                      onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'quantity', e.target.value)}
-                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent "
-                                      min="1"
-                                    />
-                                  </div>
-
-
-                                  <div className="col-span-1.5">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
-                                    <input
-                                      type="number"
-                                      value={glass.rate || ""}
-                                      onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'rate', e.target.value)}
-                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent "
-                                      min="0"
-                                      step="0.01"
-                                    />
                                   </div>
                                 </div>
 
@@ -861,8 +821,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredCapData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                        focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                                        placeholder:text-gray-400 z-50"
+                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                                                            placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -887,7 +847,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                   setCapSearches(newSearches);
 
                                                   handleTeamDetailChange(itemIndex, capIndex, 'caps', 'cap_name', capItem.FORMULA);
-                                                  handleTeamDetailChange(itemIndex, capIndex, 'caps', 'neck_size', capItem.NECK_DIAM);
+                                                  handleTeamDetailChange(itemIndex, capIndex, 'caps', 'neck_size', capItem.NECK_DIAM); // Fixed to use NECK_DIAM
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
@@ -906,12 +866,12 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
                                   <div className="col-span-12 md:col-span-8">
                                     <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-2">
+                                      <div className="col-span-6 md:col-span-3">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
                                         <input
                                           type="text"
                                           value={cap.neck_size || ""}
-                                          className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
+                                          className="w-full px-4 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
                                           readOnly
                                         />
                                       </div>
@@ -923,7 +883,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                             value={cap.process || "N/A"}
                                             onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'process', e.target.value)}
                                             className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                           >
                                             <option value="N/A">Please Select</option>
                                             {capProcessOptions
@@ -953,7 +913,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                             value={cap.material || "N/A"}
                                             onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'material', e.target.value)}
                                             className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                           >
                                             <option value="N/A">Please Select</option>
                                             {capMaterialOptions
@@ -976,28 +936,15 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         </div>
                                       </div>
 
-                                      <div className="col-span-3 md:col-span-2">
+                                      <div className="col-span-6 md:col-span-3">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                         <input
                                           type="number"
                                           value={cap.quantity || ""}
                                           onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'quantity', e.target.value)}
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                          focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="1"
-                                        />
-                                      </div>
-
-                                      <div className="col-span-3 md:col-span-2">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
-                                        <input
-                                          type="number"
-                                          value={cap.rate || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'rate', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                          focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="0"
-                                          step="0.01"
                                         />
                                       </div>
                                     </div>
@@ -1041,7 +988,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  {/* Box Name Input */}
                                   <div className="col-span-12 md:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Box Name</label>
                                     <div className="relative">
@@ -1051,7 +997,9 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         placeholder={box.box_name !== "N/A" ? box.box_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`box-${itemIndex}-${boxIndex}`);
-                                          setFilteredBoxData(boxData.filter(b => b.box_name !== "N/A"));
+                                          setFilteredBoxData(
+                                            boxData.filter(b => b.box_name !== "N/A")
+                                          );
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -1067,11 +1015,19 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredBoxData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                  focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
+                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                                                            placeholder:text-gray-400 z-50"
                                       />
-                                      <svg className="h-5 w-5 absolute right-3 top-3 text-orange-500" fill="none" stroke="currentColor">
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-5 w-5 absolute right-3 top-3 text-orange-500"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                       </svg>
+
                                       {isDropdownVisible === `box-${itemIndex}-${boxIndex}` && (
                                         <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
                                           {filteredBoxData.length > 0 ? (
@@ -1083,6 +1039,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                   const newSearches = { ...boxSearches };
                                                   newSearches[`${itemIndex}-${boxIndex}`] = boxItem.box_name;
                                                   setBoxSearches(newSearches);
+
                                                   handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'box_name', boxItem.box_name);
                                                   setIsDropdownVisible(null);
                                                 }}
@@ -1100,7 +1057,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  {/* Approval, Quantity & Rate */}
                                   <div className="col-span-12 md:col-span-8">
                                     <div className="grid grid-cols-12 gap-4">
                                       <div className="col-span-6 md:col-span-4">
@@ -1108,44 +1064,27 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         <input
                                           type="text"
                                           value={box.approval_code || ""}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'approval_code', e.target.value)
-                                          }
+                                          onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'approval_code', e.target.value)}
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                         />
                                       </div>
+
                                       <div className="col-span-6 md:col-span-4">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                         <input
                                           type="number"
                                           value={box.quantity || ""}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'quantity', e.target.value)
-                                          }
+                                          onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'quantity', e.target.value)}
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="1"
-                                        />
-                                      </div>
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
-                                        <input
-                                          type="number"
-                                          value={box.rate || ""}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'rate', e.target.value)
-                                          }
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="0"
                                         />
                                       </div>
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Buttons */}
                                 <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
                                   <button
                                     type="button"
@@ -1183,7 +1122,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  {/* Pump Name */}
                                   <div className="col-span-12 md:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Pump Name</label>
                                     <div className="relative">
@@ -1193,7 +1131,9 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         placeholder={pump.pump_name !== "N/A" ? pump.pump_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`pump-${itemIndex}-${pumpIndex}`);
-                                          setFilteredPumpData(pumpData.filter(p => p.pump_name !== "N/A"));
+                                          setFilteredPumpData(
+                                            pumpData.filter(p => p.pump_name !== "N/A")
+                                          );
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -1209,11 +1149,19 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredPumpData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                  focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
+                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                                                            placeholder:text-gray-400 z-50"
                                       />
-                                      <svg className="h-5 w-5 absolute right-3 top-3 text-orange-500" fill="none" stroke="currentColor">
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-5 w-5 absolute right-3 top-3 text-orange-500"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                       </svg>
+
                                       {isDropdownVisible === `pump-${itemIndex}-${pumpIndex}` && (
                                         <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
                                           {filteredPumpData.length > 0 ? (
@@ -1225,6 +1173,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                   const newSearches = { ...pumpSearches };
                                                   newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.pump_name;
                                                   setPumpSearches(newSearches);
+
                                                   handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.pump_name);
                                                   setIsDropdownVisible(null);
                                                 }}
@@ -1242,58 +1191,53 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  {/* Neck, Quantity, Rate */}
                                   <div className="col-span-12 md:col-span-8">
                                     <div className="grid grid-cols-12 gap-4">
                                       <div className="col-span-6 md:col-span-4">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Neck Type</label>
-                                        <select
-                                          value={pump.neck_type || "N/A"}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'neck_type', e.target.value)
-                                          }
-                                          className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                        >
-                                          <option value="N/A">Please Select</option>
-                                          {pumpNeckTypeOptions.filter(name => name !== "N/A").map((name, idx) => (
-                                            <option key={idx} value={name}>
-                                              {name}
-                                            </option>
-                                          ))}
-                                        </select>
+                                        <div className="relative">
+                                          <select
+                                            value={pump.neck_type || "N/A"}
+                                            onChange={(e) => handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'neck_type', e.target.value)}
+                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
+                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                                          >
+                                            <option value="N/A">Please Select</option>
+                                            {pumpNeckTypeOptions
+                                              .filter(name => name !== "N/A")
+                                              .map((name, idx) => (
+                                                <option key={idx} value={name}>
+                                                  {name}
+                                                </option>
+                                              ))}
+                                          </select>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                          >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                          </svg>
+                                        </div>
                                       </div>
+
                                       <div className="col-span-6 md:col-span-4">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                         <input
                                           type="number"
                                           value={pump.quantity || ""}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'quantity', e.target.value)
-                                          }
+                                          onChange={(e) => handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'quantity', e.target.value)}
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="1"
-                                        />
-                                      </div>
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
-                                        <input
-                                          type="number"
-                                          value={pump.rate || ""}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'rate', e.target.value)
-                                          }
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="0"
                                         />
                                       </div>
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Buttons */}
                                 <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
                                   <button
                                     type="button"
@@ -1321,40 +1265,21 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                       </div>
                     ))}
 
-                    <div className="mt-8 mb-6">
-                      <PriceDisplay
-                        priceINR={calculateTotalOrderPrice()}
-                        label="Total Order Price"
-                      />
-                      {isLoadingRates && (
-                        <div className="mt-2 text-center">
-                          <span className="text-sm text-orange-600 flex items-center justify-center gap-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                            Updating exchange rates...
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end gap-3 mt-8">
-                      <button
-                        type="button"
-                        className="inline-flex justify-center px-6 py-3 text-sm font-medium text-orange-900 bg-white border border-orange-300 rounded-md shadow-sm hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                        onClick={onClose}
-                      >
-                        Cancel
-                      </button>
-
-
+                    <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                       <button
                         type="submit"
-                        className={`inline-flex justify-center px-6 py-3 text-sm font-medium text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ${isSubmitting
-                          ? "bg-orange-300 cursor-not-allowed"
-                          : "bg-orange-600 hover:bg-orange-700 focus:ring-orange-500"
-                          }`}
                         disabled={isSubmitting}
+                        className="inline-flex w-full justify-center rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isSubmitting ? "Creating Order..." : "Create Order"}
+                        {isSubmitting ? 'Updating...' : 'Update Order'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={isSubmitting}
+                        className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
                       </button>
                     </div>
                   </form>
@@ -1365,7 +1290,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
         </div>
       </div>
     </Dialog>
-  )
-}
-export default CreateOrderChild
+  );
+};
 
+export default UpdateTeamOrderChild;

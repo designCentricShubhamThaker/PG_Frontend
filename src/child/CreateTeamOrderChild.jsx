@@ -12,7 +12,7 @@ import { useSocket } from '../context/SocketContext.jsx';
 
 
 const CreateTeamOrderChild = ({ onClose, onCreateOrder, user }) => {
-    console.log(user);
+  
     const [orderNumber, setOrderNumber] = useState("");
     const [dispatcherName, setDispatcherName] = useState("");
     const [customerName, setCustomerName] = useState("");
@@ -34,7 +34,6 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder, user }) => {
     const [duplicateOrderNumber, setDuplicateOrderNumber] = useState("");
     const [isSearching, setIsSearching] = useState(false);
     const [duplicateError, setDuplicateError] = useState("");
-
 
     const customers = [
         "Amit Verma",
@@ -376,8 +375,8 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder, user }) => {
 
         try {
             // Updated API endpoint - changed from /:orderNumber to /number/:orderNumber
-            // const response = await axios.get(`https://pg-backend-udfn.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
-            const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
+            const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
+            // const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
 
             if (response.data.success && response.data.data) {
                 const orderData = response.data.data;
@@ -719,7 +718,12 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder, user }) => {
                 return;
             }
 
-            const response = await axios.post('http://localhost:5000/api/team-orders', orderData, {
+            // const response = await axios.post('http://localhost:5000/api/team-orders', orderData, {
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     }
+            // });
+            const response = await axios.post('https://pg-backend-o05l.onrender.com/api/team-orders', orderData, {
                 headers: {
                     'Content-Type': 'application/json',
                 }
@@ -947,7 +951,7 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder, user }) => {
 
                                                 <div className="p-6 bg-[#FFF8F3]">
                                                     <div className="flex items-center mb-4">
-                                                        <h4 className="text-md font-medium text-orange-800">Team - Glass</h4>
+                                                        <h4 className="text-md font-medium text-orange-800">Team - Bottle</h4>
                                                     </div>
 
                                                     <div className="space-y-6">

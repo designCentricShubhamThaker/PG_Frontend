@@ -8,7 +8,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
-import DispatcherOrders from '../pages/DispatcherOrders.jsx';
+
 import TeamOrders from '../pages/TeamOrders.jsx';
 
 const TeamDashbaord = () => {
@@ -16,7 +16,7 @@ const TeamDashbaord = () => {
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout , user } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -134,7 +134,7 @@ const TeamDashbaord = () => {
               </button>
             ) : null}
             <div className="text-xl font-bold">
-              <span className="text-black">Welcome</span> <span className="text-orange-500">Dispatcher !</span>
+              <span className="text-black">Welcome</span> <span className="text-orange-500">{user.username} !</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">

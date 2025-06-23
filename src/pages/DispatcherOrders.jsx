@@ -1,4 +1,3 @@
-
 import { Plus, Eye, CheckCircle, ChevronRight, Search } from 'lucide-react';
 import { MdDeleteOutline } from "react-icons/md";
 import React, { useState, useEffect, useCallback } from 'react';
@@ -13,7 +12,6 @@ import {
   hasOrdersInLocalStorage,
   saveOrdersToLocalStorage,
   deleteOrderFromLocalStorage,
-  updateOrderInLocalStorage,
   updateDispatcherOrderInLocalStorage
 } from '../utils/localStorageUtils';
 import UpdateOrderChild from '../child/UpdateOrderChild';
@@ -37,21 +35,18 @@ const DispatcherOrders = ({ orderType }) => {
   const fetchOrders = async (type = orderType) => {
     try {
       setLoading(true);
-      if (hasOrdersInLocalStorage(type)) {
-        const cachedOrders = getOrdersFromLocalStorage(type);
+      if (hasOrdersInLocalStorage(type, 'dispatcher')) {
+        const cachedOrders = getOrdersFromLocalStorage(type, 'dispatcher');
         setOrders(cachedOrders);
-        setFilteredOrders(cachedOrders);
         setLoading(false);
         return;
       }
-
-      // const response = await axios.get(`https://pg-backend-udfn.onrender.com/api/orders?orderType=${type}`);
+      // const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders?orderType=${type}`);
       const response = await axios.get(`http://localhost:5000/api/orders?orderType=${type}`);
       const fetchedOrders = response.data.data || [];
 
-      saveOrdersToLocalStorage(fetchedOrders, type);
+      saveOrdersToLocalStorage(fetchedOrders, type, 'dispatcher');
       setOrders(fetchedOrders);
-      setFilteredOrders(fetchedOrders);
       setLoading(false);
     } catch (err) {
       setError('Failed to fetch orders: ' + (err.response?.data?.message || err.message));
@@ -77,128 +72,312 @@ const DispatcherOrders = ({ orderType }) => {
     return Array.from(teams);
   };
 
-  const handleProgressUpdate = useCallback((progressData) => {
-    console.log('📈 Received progress update in dispatcher:', progressData);
+  const handleNewOrder = useCallback((orderData) => {
     try {
-      const orderNumber = progressData.orderNumber || progressData.order_number;
+      const { orderData: newOrder, orderNumber, customerName, dispatcherName } = orderData;
 
-      if (!orderNumber) {
-        console.warn('No order number in progress update');
+      if (!newOrder || !newOrder._id) {
+       
+        
         return;
       }
-      setOrders(prevOrders => {
-        const updatedOrders = prevOrders.map(order => {
-          if (order.order_number === orderNumber) {
-            let updatedOrder;
-            if (progressData.orderData && progressData.orderData._id) {
-              updatedOrder = { ...order, ...progressData.orderData };
-            } else {
-              updatedOrder = { ...order };
-            }
-            
-            if (updatedOrder.order_status === 'Completed' && order.order_status !== 'Completed') {
-              console.log(`Order ${orderNumber} completed, updating localStorage`);
-              updateDispatcherOrderInLocalStorage(updatedOrder);
-              
-              if (orderType === 'pending') {
-                return null;
-              }
-            } else if (updatedOrder.order_status !== 'Completed' && updatedOrder !== order) {
-              updateDispatcherOrderInLocalStorage(updatedOrder);
-            }
-            
-            return updatedOrder;
+      // Only add to pending orders if we're viewing pending orders
+      if (orderType === 'pending') {
+        setOrders(prevOrders => {
+          // Check if order already exists
+          const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+
+          let updatedOrders;
+          if (existingOrderIndex !== -1) {
+            // Update existing order
+            updatedOrders = [...prevOrders];
+            updatedOrders[existingOrderIndex] = newOrder;
+          } else {
+            // Add new order to the beginning of the list
+            updatedOrders = [newOrder, ...prevOrders];
           }
-          return order;
-        }).filter(Boolean); 
-  
-        const orderToUpdate = updatedOrders.find(o => o.order_number === orderNumber);
-        if (orderToUpdate && orderToUpdate.order_status !== 'Completed') {
-          saveOrdersToLocalStorage(updatedOrders, orderType);
-        }     
+          saveOrdersToLocalStorage(updatedOrders, 'pending', 'dispatcher');
+          return updatedOrders;
+        });
+
+        toast.success(`New order #${orderNumber} created by ${dispatcherName} for ${customerName}`);
+
+
+      }
+
+    } catch (error) {
+      console.error('Error handling new order:', error);
+    }
+  }, [orderType]);
+
+
+  const handleOrderUpdated = useCallback((updateData) => {
+    try {
+      const { orderData: updatedOrder, orderNumber } = updateData;
+
+      if (!updatedOrder || !updatedOrder._id) {
+        return;
+      }
+
+      setOrders(prevOrders => {
+        const updatedOrders = prevOrders.map(order =>
+          order._id === updatedOrder._id ? updatedOrder : order
+        );
+
+        saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
         return updatedOrders;
       });
 
-      setFilteredOrders(prevFiltered => {
-        return prevFiltered.map(order => {
-          if (order.order_number === orderNumber) {
-            let updatedOrder;
-            if (progressData.orderData && progressData.orderData._id) {
-              updatedOrder = { ...order, ...progressData.orderData };
-            } else {
-              updatedOrder = { ...order };
-            }
-            if (orderType === 'pending' && updatedOrder.order_status === 'Completed') {
-              return null;
-            }
-            return updatedOrder;
-          }
-          return order;
-        }).filter(Boolean)
+      toast.info(`Order #${orderNumber} has been updated`);
+
+    } catch (error) {
+      console.error('Error handling order update:', error);
+    }
+  }, [orderType]);
+
+  const calculateTotalItems = (order) => {
+    if (!order.item_ids || !Array.isArray(order.item_ids)) return 0;
+    return order.item_ids.length;
+  };
+
+  const calculateCompletedItems = (order) => {
+    if (!order.item_ids || !Array.isArray(order.item_ids)) {
+      
+      return 0;
+    }
+
+    let completedItemsCount = 0;
+    const totalItems = order.item_ids.length;
+
+ 
+    order.item_ids.forEach((item, itemIndex) => {
+      const assignments = item.team_assignments;
+
+      if (!assignments || typeof assignments !== 'object') {
+        return;
+      }
+
+      const teamsWithAssignments = Object.keys(assignments).filter(teamName => {
+        const teamAssignments = assignments[teamName];
+        return Array.isArray(teamAssignments) && teamAssignments.length > 0;
       });
 
-      console.log(`✅ Order #${orderNumber} progress updated in real-time`);
-      
-    } catch (error) {
-      console.error('Error handling progress update:', error);
+      if (teamsWithAssignments.length === 0) {
+        return;
+      }
+
+      let itemFullyCompleted = true;
+
+      for (let teamName of teamsWithAssignments) {
+        const teamAssignments = assignments[teamName];
+        let teamCompleted = true;
+
+        for (let assignment of teamAssignments) {
+
+          const isCompleted = assignment.team_tracking?.total_completed_qty >= assignment.quantity;
+
+          if (!isCompleted) {
+            teamCompleted = false;
+            break;
+          } 
+        }
+        if (!teamCompleted) {
+          itemFullyCompleted = false;
+          break;
+        }
+      }
+
+      if (itemFullyCompleted) {
+        completedItemsCount++;
+      } else {
+      }
+    });
+    return completedItemsCount;
+  };
+
+  
+  const calculateCompletionPercentage = (order) => {
+    if (!order || !order.item_ids || order.item_ids.length === 0) {
+      return 0;
     }
-  }, [orderType, updateDispatcherOrderInLocalStorage]);
+
+    const totalItems = order.item_ids.length;
+    const completedItems = calculateCompletedItems(order);
+    const percentage = Math.round((completedItems / totalItems) * 100);
+    return percentage;
+  }
+
+  const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
+    try {
+
+      const sourceOrders = getOrdersFromLocalStorage(fromCategory, 'dispatcher') || [];
+      const updatedSourceOrders = sourceOrders.filter(o => o._id !== order._id);
+      saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, 'dispatcher');
+
+      const destOrders = getOrdersFromLocalStorage(toCategory, 'dispatcher') || [];
+      const existingIndex = destOrders.findIndex(o => o._id === order._id);
+
+      if (existingIndex !== -1) {
+
+        destOrders[existingIndex] = order;
+      } else {
+        destOrders.unshift(order);
+      }
+
+      saveOrdersToLocalStorage(destOrders, toCategory, 'dispatcher');
+  
+    } catch (error) {
+
+    }
+  };
+
+  const handleProgressUpdate = useCallback((progressData) => {
+    console.log('📈 Received progress update:', progressData);
+    const orderNumber = progressData.orderNumber || progressData.order_number;
+    if (!orderNumber) {
+      console.warn('No order number in progress update');
+      return;
+    }
+
+    setOrders(prevOrders => {
+      const updatedOrders = prevOrders.map(order => {
+        if (order.order_number === orderNumber) {
+          const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
+
+          const teamType = progressData.team?.toLowerCase().includes('glass') ? 'glass' :
+            progressData.team?.toLowerCase().includes('box') ? 'boxes' :
+              progressData.team?.toLowerCase().includes('cap') ? 'caps' :
+                progressData.team?.toLowerCase().includes('pump') ? 'pumps' : null;
+
+          const mergedOrder = {
+            ...order,
+            ...updatedOrder,
+            item_ids: order.item_ids.map(existingItem => {
+              const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
+              if (updatedItem) {
+                const mergedTeamAssignments = {
+                  ...existingItem.team_assignments
+                };
+
+                if (teamType && updatedItem.team_assignments?.[teamType]) {
+                  mergedTeamAssignments[teamType] = updatedItem.team_assignments[teamType];
+                }
+
+                return {
+                  ...existingItem,
+                  ...updatedItem,
+                  team_assignments: mergedTeamAssignments
+                };
+              }
+              return existingItem;
+            })
+          };
+          const completedItems = calculateCompletedItems(mergedOrder);
+          const totalItems = calculateTotalItems(mergedOrder);
+          const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+          const previousStatus = order.order_status;
+          const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
+
+          const finalOrder = {
+            ...mergedOrder,
+            order_status: newStatus
+          };
+
+          if (previousStatus !== newStatus) {
+            if (newStatus === 'Completed') {
+              moveOrderBetweenCategories(finalOrder, 'pending', 'completed');
+            } else if (newStatus === 'Pending' && previousStatus === 'Completed') {
+              moveOrderBetweenCategories(finalOrder, 'completed', 'pending');
+            }
+          } else {
+            updateDispatcherOrderInLocalStorage(finalOrder, 'dispatcher');
+          }
+
+          return finalOrder;
+        }
+        return order;
+      });
+
+      // Save to current category localStorage
+      saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
+      return updatedOrders;
+    });
+
+  }, [orderType, moveOrderBetweenCategories, calculateCompletedItems, calculateTotalItems]);
+
+  useEffect(() => {
+    if (orders.length === 0) {
+      setFilteredOrders([]);
+      return;
+    }
+
+    let filteredByType = orders.filter(order => {
+      const isCompleted = order.order_status === 'Completed';
+      if (orderType === 'pending') {
+        const shouldShow = !isCompleted;
+        return shouldShow;
+      }
+      if (orderType === 'completed') {
+        const shouldShow = isCompleted;
+        return shouldShow;
+      }
+      return true; 
+    });
+
+    if (searchTerm) {
+      filteredByType = filteredByType.filter(order =>
+        order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.dispatcher_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    setFilteredOrders(filteredByType);
+
+  }, [orders, orderType, searchTerm]);
 
   const handleOrderDeleted = useCallback((deleteData) => {
-    console.log('🗑️ Dispatcher received order delete notification:', deleteData);
+
     try {
       const { orderId, orderNumber } = deleteData;
       if (!orderId) {
-        console.warn('No order ID in delete notification');
         return;
       }
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-        saveOrdersToLocalStorage(updatedOrders, orderType);
+        saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
         return updatedOrders;
       });
 
-      setFilteredOrders(prevFiltered => {
-        return prevFiltered.filter(order => order._id !== orderId);
-      });
-      deleteOrderFromLocalStorage(orderId);
+      deleteOrderFromLocalStorage(orderId, 'dispatcher');
 
       toast.success(`Order #${orderNumber} has been deleted successfully`);
-      console.log(`✅ Order #${orderNumber} removed from dispatcher view`);
-      
+
     } catch (error) {
-      console.error('Error handling order delete notification:', error);
+     
     }
   }, [orderType]);
 
   useEffect(() => {
     if (!socket || !isConnected) return;
-    console.log('🔌 Setting up socket listeners for dispatcher orders');
+
+    socket.on('new-order', handleNewOrder);
+    socket.on('order-updated', handleOrderUpdated);
     socket.on('team-progress-updated', handleProgressUpdate);
     socket.on('order-deleted', handleOrderDeleted);
-    
+
     return () => {
+      socket.off('new-order', handleNewOrder);
+      socket.off('order-updated', handleOrderUpdated);
       socket.off('team-progress-updated', handleProgressUpdate);
       socket.off('order-deleted', handleOrderDeleted);
-      console.log('🔌 Cleaned up socket listeners');
     };
-  }, [socket, isConnected, handleProgressUpdate, handleOrderDeleted]);
+  }, [socket, isConnected, handleNewOrder, handleOrderUpdated, handleProgressUpdate, handleOrderDeleted]);
 
   useEffect(() => {
     fetchOrders(orderType);
   }, [orderType]);
-
-  useEffect(() => {
-    if (orders.length > 0) {
-      const filtered = orders.filter(order =>
-        order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.dispatcher_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredOrders(filtered);
-      setCurrentPage(1);
-    }
-  }, [searchTerm, orders]);
 
   const handleCreateOrder = async () => {
     await fetchOrders(orderType);
@@ -206,17 +385,17 @@ const DispatcherOrders = ({ orderType }) => {
   };
 
   const handleDelete = async (orderId) => {
-  try {
-    const orderToDelete = orders.find(order => order._id === orderId);
-    
-    if (!orderToDelete) {
-      toast.error('Order not found');
-      return;
-    }
+    try {
+      const orderToDelete = orders.find(order => order._id === orderId);
 
-    const result = await Swal.fire({
-      title: 'Delete Order',
-      html: `
+      if (!orderToDelete) {
+        toast.error('Order not found');
+        return;
+      }
+
+      const result = await Swal.fire({
+        title: 'Delete Order',
+        html: `
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin: 20px 0; text-align: center;">
           <div>
             <div style="font-weight: 600; color: #666; font-size: 12px; margin-bottom: 4px;">ORDER</div>
@@ -235,92 +414,92 @@ const DispatcherOrders = ({ orderType }) => {
           <strong style="color: #856404;">⚠️ This action cannot be undone</strong>
         </div>
       `,
-      showCancelButton: true,
-      confirmButtonColor: '#dc3545',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Delete',
-      cancelButtonText: 'Cancel',
-      width: '600px',
-      allowOutsideClick: false
-    });
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        width: '600px',
+        allowOutsideClick: false
+      });
 
-    if (!result.isConfirmed) {
-      return;
-    }
-
-    Swal.fire({
-      title: 'Deleting...',
-      html: '<div style="padding: 20px;">Please wait...</div>',
-      allowOutsideClick: false,
-      showConfirmButton: false,
-      didOpen: () => Swal.showLoading()
-    });
-
-    const assignedTeams = getAssignedTeams(orderToDelete);
-
-    // API call (uncomment the appropriate one)
-    // const response = await axios.delete(`https://pg-backend-udfn.onrender.com/api/orders/${orderId}`);
-    const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
-
-    if (response.data.success) {
-      const deleteNotificationData = {
-        orderId: orderToDelete._id,
-        orderNumber: orderToDelete.order_number,
-        customerName: orderToDelete.customer_name,
-        dispatcherName: orderToDelete.dispatcher_name,
-        assignedTeams: assignedTeams
-      };
-
-      const notificationSent = notifyOrderDelete(deleteNotificationData);
-      
-      if (!notificationSent) {
-        console.warn('Failed to send delete notification via socket');
+      if (!result.isConfirmed) {
+        return;
       }
 
-      // Update state
-      const updatedOrders = orders.filter(order => order._id !== orderId);
-      setOrders(updatedOrders);
-      setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
-      deleteOrderFromLocalStorage(orderId);
+      Swal.fire({
+        title: 'Deleting...',
+        html: '<div style="padding: 20px;">Please wait...</div>',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+      });
 
-      Swal.close();
-      
-      await Swal.fire({
-        title: 'Order Deleted',
-        html: `
+      const assignedTeams = getAssignedTeams(orderToDelete);
+
+      // API call (uncomment the appropriate one)
+      // const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}`);
+      const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
+
+      if (response.data.success) {
+        const deleteNotificationData = {
+          orderId: orderToDelete._id,
+          orderNumber: orderToDelete.order_number,
+          customerName: orderToDelete.customer_name,
+          dispatcherName: orderToDelete.dispatcher_name,
+          assignedTeams: assignedTeams
+        };
+
+        const notificationSent = notifyOrderDelete(deleteNotificationData);
+
+        if (!notificationSent) {
+          console.warn('Failed to send delete notification via socket');
+        }
+
+
+        const updatedOrders = orders.filter(order => order._id !== orderId);
+        setOrders(updatedOrders);
+        setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
+        deleteOrderFromLocalStorage(orderId);
+
+        Swal.close();
+
+        await Swal.fire({
+          title: 'Order Deleted',
+          html: `
           <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin: 20px 0;">
             <div style="color: #28a745; font-size: 48px;">✓</div>
             <div>
               <div style="font-weight: 600; margin-bottom: 8px;">
                 Order #${orderToDelete.order_number} deleted successfully
               </div>
-              ${assignedTeams.length > 0 ? 
-                `<div style="color: #666; font-size: 14px;">
+              ${assignedTeams.length > 0 ?
+              `<div style="color: #666; font-size: 14px;">
                   Notifications sent to: <strong>${assignedTeams.join(', ').toUpperCase()}</strong>
                 </div>` : ''
-              }
+            }
             </div>
           </div>
         `,
-        icon: 'success',
-        timer: 3000,
-        showConfirmButton: false,
-        width: '500px'
-      });
+          icon: 'success',
+          timer: 3000,
+          showConfirmButton: false,
+          width: '500px'
+        });
 
-    } else {
+      } else {
+        Swal.close();
+        setError('Error deleting order: ' + (response.data.message || 'Unknown error'));
+        toast.error('Failed to delete order');
+      }
+    } catch (err) {
       Swal.close();
-      setError('Error deleting order: ' + (response.data.message || 'Unknown error'));
-      toast.error('Failed to delete order');
-    }
-  } catch (err) {
-    Swal.close();
-    const errorMessage = err.response?.data?.message || err.message;
-    setError('Error deleting order: ' + errorMessage);
-    
-    await Swal.fire({
-      title: 'Delete Failed',
-      html: `
+      const errorMessage = err.response?.data?.message || err.message;
+      setError('Error deleting order: ' + errorMessage);
+
+      await Swal.fire({
+        title: 'Delete Failed',
+        html: `
         <div style="display: flex; align-items: center; gap: 15px; margin: 20px 0;">
           <div style="color: #dc3545; font-size: 48px;">✗</div>
           <div>
@@ -329,12 +508,13 @@ const DispatcherOrders = ({ orderType }) => {
           </div>
         </div>
       `,
-      icon: 'error',
-      confirmButtonText: 'OK',
-      width: '500px'
-    });
-  }
-};
+        icon: 'error',
+        confirmButtonText: 'OK',
+        width: '500px'
+      });
+    }
+  };
+
   const handleView = (rowData) => {
     setSelectedOrder(rowData);
     setShowModal(true);
@@ -357,67 +537,6 @@ const DispatcherOrders = ({ orderType }) => {
     setFilteredOrders(updatedOrders);
   };
 
-  const calculateTotalItems = (order) => {
-    if (!order.item_ids || !Array.isArray(order.item_ids)) return 0;
-    return order.item_ids.length;
-  };
-
-  const calculateCompletedItems = (order) => {
-    if (!order.item_ids || !Array.isArray(order.item_ids)) return 0;
-    let completedItems = 0;
-
-    order.item_ids.forEach(item => {
-      let allCompleted = true;
-      let hasAssignments = false;
-
-      const teamAssignments = item.team_assignments || {};
-
-      if (teamAssignments.glass && teamAssignments.glass.length > 0) {
-        hasAssignments = true;
-        for (const glass of teamAssignments.glass) {
-          if (glass.status !== 'Completed') {
-            allCompleted = false;
-            break;
-          }
-        }
-      }
-      if (allCompleted && teamAssignments.caps && teamAssignments.caps.length > 0) {
-        hasAssignments = true;
-        for (const cap of teamAssignments.caps) {
-          if (cap.status !== 'Completed') {
-            allCompleted = false;
-            break;
-          }
-        }
-      }
-
-      if (allCompleted && teamAssignments.boxes && teamAssignments.boxes.length > 0) {
-        hasAssignments = true;
-        for (const box of teamAssignments.boxes) {
-          if (box.status !== 'Completed') {
-            allCompleted = false;
-            break;
-          }
-        }
-      }
-
-      if (allCompleted && teamAssignments.pumps && teamAssignments.pumps.length > 0) {
-        hasAssignments = true;
-        for (const pump of teamAssignments.pumps) {
-          if (pump.status !== 'Completed') {
-            allCompleted = false;
-            break;
-          }
-        }
-      }
-
-      if (hasAssignments && allCompleted) {
-        completedItems++;
-      }
-    });
-
-    return completedItems;
-  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -426,29 +545,6 @@ const DispatcherOrders = ({ orderType }) => {
       month: '2-digit',
       year: 'numeric'
     });
-  };
-
-  const calculateCompletionPercentage = (order) => {
-    if (!order || !order.item_ids || order.item_ids.length === 0) return 0;
-
-    const totalItems = order.item_ids.length;
-    let completedItems = 0;
-
-    order.item_ids.forEach(item => {
-      let totalAssignments = 0;
-      let completedAssignments = 0;
-
-      Object.values(item.team_assignments).forEach(assignments => {
-        totalAssignments += assignments.length;
-        completedAssignments += assignments.filter(a => a.status === 'Completed').length;
-      });
-      if (totalAssignments > 0 && completedAssignments === totalAssignments) {
-        completedItems += 1;
-      }
-    });
-
-    const percent = (completedItems / totalItems) * 100;
-    return Number(percent.toFixed(2));
   };
 
   const indexOfLastOrder = currentPage * ordersPerPage;
@@ -467,7 +563,6 @@ const DispatcherOrders = ({ orderType }) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Socket connection indicator */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
           <button
@@ -476,14 +571,6 @@ const DispatcherOrders = ({ orderType }) => {
           >
             <Plus size={16} /> Create Order
           </button>
-
-          {/* Socket status indicator */}
-          {/* <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-xs text-gray-600">
-              {isConnected ? 'Real-time updates active' : 'Offline'}
-            </span>
-          </div> */}
         </div>
 
         <div className="relative">

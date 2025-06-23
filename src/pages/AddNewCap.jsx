@@ -27,7 +27,8 @@ const AddNewCap = () => {
     NECK_DIAM: ''
   });
 
-  const API_BASE = 'http://localhost:5000/api/capdata';
+  // const API_BASE = 'http://localhost:5000/api/capdata';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/capdata';
 
   const fetchBottles = async () => {
     try {

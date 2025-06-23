@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import AddNewBoxChild from '../child/AddNewBoxChild.jsx';
+
 import AddNEwAccessoriesChild from '../child/AddNewAccessoriesChild.jsx';
 
 
@@ -23,7 +23,8 @@ const AddNewAccessories = () => {
 
 
 
-  const API_BASE = 'http://localhost:5000/api/accessories';
+  // const API_BASE = 'http://localhost:5000/api/accessories';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/accessories';
 
   const fetchBottles = async () => {
     try {

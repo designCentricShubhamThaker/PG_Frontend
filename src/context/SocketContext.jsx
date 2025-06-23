@@ -15,7 +15,7 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (!user || !user.role) return;
 
-        // const socketInstance = io('https://pg-backend-udfn.onrender.com', {
+        // const socketInstance = io('https://pg-backend-o05l.onrender.com', {
         //     withCredentials: true,
         //     transports: ['websocket', 'polling'],
         //     query: {
@@ -95,15 +95,26 @@ export const SocketProvider = ({ children }) => {
         try {
             const assignedTeams = [];
 
+            // DEBUG: Log the order data structure
+            console.log('🔍 Order data structure:', JSON.stringify(orderData, null, 2));
+
             orderData.item_ids?.forEach(item => {
+                console.log('🔍 Processing item:', item.name);
+                console.log('🔍 Item team_assignments:', item.team_assignments);
+
                 if (item.team_assignments) {
                     Object.keys(item.team_assignments).forEach(team => {
+                        console.log(`🔍 Checking team: ${team}, assignments:`, item.team_assignments[team]);
+
                         if (item.team_assignments[team].length > 0 && !assignedTeams.includes(team)) {
                             assignedTeams.push(team);
+                            console.log(`✅ Added team: ${team}`);
                         }
                     });
                 }
             });
+
+            console.log('🔍 Final assigned teams:', assignedTeams);
 
             const notificationData = {
                 order: orderData,
@@ -224,7 +235,7 @@ export const SocketProvider = ({ children }) => {
         }
     }, [socket]);
 
-  
+
     const notifyOrderDelete = useCallback((deleteData) => {
         if (!socket || !socket.connected || !deleteData) {
             console.warn('Cannot send delete notification - socket not connected or no data');
@@ -269,7 +280,7 @@ export const SocketProvider = ({ children }) => {
         notifyTeam,
         notifyOrderEdit,
         notifyProgressUpdate,
-         notifyOrderDelete
+        notifyOrderDelete
     };
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;

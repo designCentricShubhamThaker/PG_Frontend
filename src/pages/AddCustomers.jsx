@@ -24,7 +24,8 @@ const AddNewCustomers = () => {
 
 
 
-  const API_BASE = 'http://localhost:5000/api/customer';
+  // const API_BASE = 'http://localhost:5000/api/customer';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/customer';
 
   const fetchBottles = async () => {
     try {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import AddNewProductChild from '../child/AddNewProductChild.jsx';
+
 import AddNewPumpChild from '../child/AddNewPumpChild.jsx';
 
 const AddNewPump = () => {
@@ -22,7 +22,8 @@ const AddNewPump = () => {
 
 
 
-  const API_BASE = 'http://localhost:5000/api/pumpdata';
+  // const API_BASE = 'http://localhost:5000/api/pumpdata';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/pumpdata';
 
   const fetchBottles = async () => {
     try {

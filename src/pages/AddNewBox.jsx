@@ -22,7 +22,8 @@ const AddNewBox = () => {
 
 
 
-  const API_BASE = 'http://localhost:5000/api/boxdata';
+  // const API_BASE = 'http://localhost:5000/api/boxdata';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/boxdata';
 
   const fetchBottles = async () => {
     try {

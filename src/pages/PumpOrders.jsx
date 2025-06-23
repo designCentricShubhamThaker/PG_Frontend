@@ -12,10 +12,11 @@ import {
     saveOrdersToLocalStorage as saveTeamOrdersToLocalStorage,
     updateOrderInLocalStorage
 } from '../utils/localStorageUtils.jsx';
-import UpdateGlassQty from '../updateQuanityComponents/updateGlassQty.jsx';
-import { useSocket } from '../context/SocketContext.jsx';
 
-const GlassOrders = ({ orderType }) => {
+import { useSocket } from '../context/SocketContext.jsx';
+import UpdatePumpQty from '../updateQuanityComponents/updatePumpQty.jsx';
+
+const PumpOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -42,9 +43,10 @@ const GlassOrders = ({ orderType }) => {
     };
 
     const isItemCompleted = (item) => {
-        const glassAssignments = item.team_assignments?.glass || [];
-        if (glassAssignments.length === 0) return false;
-        return glassAssignments.every(assignment => getRemainingQty(assignment) === 0);
+        // FIXED: Check boxes assignments instead of glass
+        const boxAssignments = item.team_assignments?.pumps || [];
+        if (boxAssignments.length === 0) return false;
+        return boxAssignments.every(assignment => getRemainingQty(assignment) === 0);
     };
 
     const isOrderCompleted = (order) => {
@@ -61,26 +63,28 @@ const GlassOrders = ({ orderType }) => {
             updatedOrder.order_status = newStatus;
         }
 
-        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.GLASS);
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PUMPS);
 
         return updatedOrder;
     };
 
-    const hasGlassAssignments = (order) => {
+    // FIXED: Check for boxes assignments instead of glass
+    const hasBoxAssignments = (order) => {
         return order.item_ids?.some(item =>
-            item.team_assignments?.glass && item.team_assignments.glass.length > 0
+            item.team_assignments?.pumps && item.team_assignments.pumps.length > 0
         );
     };
 
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Glass team received new order:', orderData);
+        console.log('📦 Box team received new order:', orderData);
 
         if (!orderData.orderData) return;
 
         const newOrder = orderData.orderData;
 
-        if (!hasGlassAssignments(newOrder)) {
-            console.log('Order has no glass assignments, ignoring');
+        // FIXED: Check for box assignments instead of glass
+        if (!hasBoxAssignments(newOrder)) {
+            console.log('Order has no box assignments, ignoring');
             return;
         }
 
@@ -97,24 +101,21 @@ const GlassOrders = ({ orderType }) => {
 
             let updatedOrders;
             if (existingOrderIndex >= 0) {
-
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = newOrder;
                 console.log('Updated existing order:', newOrder.order_number);
-
             } else {
-
                 updatedOrders = [newOrder, ...prevOrders];
                 console.log('Added new order:', newOrder.order_number);
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PUMPS);
 
             return updatedOrders;
         });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Glass team received order update:', updateData);
+        console.log('✏️ Box team received order update:', updateData);
 
         if (!updateData.orderData) return;
 
@@ -125,20 +126,20 @@ const GlassOrders = ({ orderType }) => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from glass team:', updatedOrder.order_number);
+                console.log('Order removed from box team:', updatedOrder.order_number);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PUMPS);
                     return filteredOrders;
                 }
                 return prevOrders;
             }
 
-            if (!hasGlassAssignments(updatedOrder)) {
-                console.log('Updated order has no glass assignments, removing if exists');
+            if (!hasBoxAssignments(updatedOrder)) {
+                console.log('Updated order has no box assignments, removing if exists');
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PUMPS);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -152,7 +153,7 @@ const GlassOrders = ({ orderType }) => {
 
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PUMPS);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -168,20 +169,19 @@ const GlassOrders = ({ orderType }) => {
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
 
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PUMPS);
 
             return updatedOrders;
         });
 
         if (updateData.editedFields && updateData.editedFields.length > 0) {
             console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
-            // You could show a toast notification here if you have a notification system
             toast.success("order progress updated !")
         }
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Glass team received order delete notification:', deleteData);
+        console.log('🗑️ Box team received order delete notification:', deleteData);
         try {
             const { orderId, orderNumber } = deleteData;
             if (!orderId) {
@@ -191,7 +191,7 @@ const GlassOrders = ({ orderType }) => {
 
             setOrders(prevOrders => {
                 const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PUMPS);
                 return updatedOrders;
             });
 
@@ -199,17 +199,15 @@ const GlassOrders = ({ orderType }) => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
 
-            // Remove from localStorage
             deleteOrderFromLocalStorage(orderId);
 
             toast.success(`Order #${orderNumber} has been deleted`);
-            console.log(`✅ Order #${orderNumber} removed from glass team view`);
+            console.log(`✅ Order #${orderNumber} removed from box team view`);
 
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
     }, [orderType]);
-
 
     useEffect(() => {
         if (!socket) return;
@@ -217,41 +215,41 @@ const GlassOrders = ({ orderType }) => {
         socket.on('order-updated', handleOrderUpdate);
         socket.on('order-deleted', handleOrderDeleted);
 
-
         return () => {
             socket.off('new-order', handleNewOrder);
             socket.off('order-updated', handleOrderUpdate);
             socket.off('order-deleted', handleOrderDeleted);
-
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-    const fetchGlassOrders = async (type = orderType) => {
+    // FIXED: Function name changed from fetchGlassOrders to fetchBoxOrders
+    const fetchBoxOrders = async (type = orderType) => {
         try {
             setLoading(true);
-            if (hasTeamOrdersInLocalStorage(type, TEAMS.GLASS)) {
-                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.GLASS);
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.PUMPS)) {
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PUMPS);
                 setOrders(cachedOrders);
                 setFilteredOrders(cachedOrders);
                 setLoading(false);
                 return;
             }
 
-            const response = await axios.get(`http://localhost:5000/api/glass?orderType=${type}`);
+            // const response = await axios.get(`http://localhost:5000/api/pumps?orderType=${type}`);
+            const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/pumps?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
 
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.GLASS);
+            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.PUMPS);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
             setLoading(false);
         } catch (err) {
-            setError('Failed to fetch glass orders: ' + (err.response?.data?.message || err.message));
+            setError('Failed to fetch box orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchGlassOrders(orderType);
+        fetchBoxOrders(orderType);
     }, [orderType]);
 
     useEffect(() => {
@@ -268,12 +266,13 @@ const GlassOrders = ({ orderType }) => {
                     if (item.name?.toLowerCase().includes(searchTerm.toLowerCase())) {
                         return true;
                     }
-                    return item.team_assignments?.glass?.some(glass => {
-                        return glass.glass_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
+                    // FIXED: Search in boxes assignments instead of glass
+                    return item.team_assignments?.pumps?.some(box => {
+                        return box.pumps?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            box.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            box.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            box.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            box.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
                     });
                 });
             });
@@ -339,7 +338,7 @@ const GlassOrders = ({ orderType }) => {
                     <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
                         <Package className="w-8 h-8 text-orange-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No glass orders found</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Box orders found</h3>
                     <p className="text-sm text-gray-500 text-center max-w-sm">
                         When you receive new orders, they will appear here for easy management and tracking.
                     </p>
@@ -355,18 +354,18 @@ const GlassOrders = ({ orderType }) => {
                     <div
                         className="grid gap-2 text-white font-semibold text-xs items-center"
                         style={{
-                            gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
+                            gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
                         }}
                     >
+
                         <div className="text-left">Order #</div>
                         <div className="text-left">Item</div>
-                        <div className="text-left px-2">Bottle Name</div>
+                        <div className="text-left px-2">Box Name</div>
+                        <div className="text-left px-2">Neck type </div>
                         <div className="text-left">Quantity</div>
                         <div className="text-left">Remaining</div>
                         <div className="text-left">Status</div>
-                        <div className="text-left">Neck Size</div>
-                        <div className="text-left">Weight</div>
-                        <div className="text-left">Decoration #</div>
+
                         <div className="text-center">Action</div>
                     </div>
                 </div>
@@ -375,8 +374,9 @@ const GlassOrders = ({ orderType }) => {
                 {currentOrders.map((order, orderIndex) => {
                     let totalOrderRows = 0;
                     order.item_ids?.forEach(item => {
-                        const glassAssignments = item.team_assignments?.glass || [];
-                        totalOrderRows += Math.max(1, glassAssignments.length);
+                        // FIXED: Count boxes assignments instead of glass
+                        const boxAssignments = item.team_assignments?.pumps || [];
+                        totalOrderRows += Math.max(1, boxAssignments.length);
                     });
 
                     let currentRowInOrder = 0;
@@ -384,21 +384,21 @@ const GlassOrders = ({ orderType }) => {
                     return (
                         <div key={`order-${order._id}`} className="bg-white rounded-lg shadow-sm border border-orange-200 mb-3 overflow-hidden">
                             {order.item_ids?.map((item, itemIndex) => {
-                                const glassAssignments = item.team_assignments?.glass || [];
-                                const assignments = glassAssignments.length === 0 ? [null] : glassAssignments;
+                                // FIXED: Use boxes assignments instead of glass
+                                const boxAssignments = item.team_assignments?.pumps || [];
+                                const assignments = boxAssignments.length === 0 ? [null] : boxAssignments;
                                 const bgColor = colorClasses[itemIndex % colorClasses.length];
 
-                                return assignments.map((glass, assignmentIndex) => {
+                                return assignments.map((box, assignmentIndex) => {
                                     const isFirstRowOfOrder = currentRowInOrder === 0;
                                     const isFirstRowOfItem = assignmentIndex === 0;
                                     const isLastRowOfOrder = currentRowInOrder === totalOrderRows - 1;
                                     currentRowInOrder++;
 
-                                    // Calculate remaining qty and status for this assignment
-                                    const remainingQty = glass ? getRemainingQty(glass) : 'N/A';
-                                    const status = glass ? getAssignmentStatus(glass) : 'N/A';
+                                    // FIXED: Calculate for box assignments
+                                    const remainingQty = box ? getRemainingQty(box) : 'N/A';
+                                    const status = box ? getAssignmentStatus(box) : 'N/A';
 
-                                    // Status styling
                                     const getStatusStyle = (status) => {
                                         switch (status) {
                                             case 'Completed':
@@ -414,10 +414,10 @@ const GlassOrders = ({ orderType }) => {
 
                                     return (
                                         <div
-                                            key={`${order._id}-${item._id}-${glass?._id || 'empty'}-${assignmentIndex}`}
+                                            key={`${order._id}-${item._id}-${box?._id || 'empty'}-${assignmentIndex}`}
                                             className={`grid gap-2 items-center py-2 px-3 text-xs ${bgColor} ${!isLastRowOfOrder ? 'border-b border-orange-100' : ''}`}
                                             style={{
-                                                gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
+                                                gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
                                             }}
                                         >
                                             <div className="text-left">
@@ -437,11 +437,16 @@ const GlassOrders = ({ orderType }) => {
                                             </div>
 
                                             <div className="text-left text-orange-900 px-2">
-                                                {glass ? (glass.glass_name || 'N/A') : 'N/A'}
+                                                {/* FIXED: Use box.boxes_name instead of glass_name */}
+                                                {box ? (box.pump_name || 'N/A') : 'N/A'}
+                                            </div>
+                                            <div className="text-left text-orange-900 px-2">
+                                                {/* FIXED: Use box.boxes_name instead of glass_name */}
+                                                {box ? (box.neck_type || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-orange-900">
-                                                {glass ? (glass.quantity || 'N/A') : 'N/A'}
+                                                {box ? (box.quantity || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left">
@@ -456,17 +461,7 @@ const GlassOrders = ({ orderType }) => {
                                                 </span>
                                             </div>
 
-                                            <div className="text-left text-orange-900">
-                                                {glass ? (glass.neck_size || 'N/A') : 'N/A'}
-                                            </div>
 
-                                            <div className="text-left text-gray-800">
-                                                {glass ? (glass.weight || 'N/A') : 'N/A'}
-                                            </div>
-
-                                            <div className="text-left text-gray-800">
-                                                {glass ? (glass.decoration_no || 'N/A') : 'N/A'}
-                                            </div>
 
                                             <div className="text-center">
                                                 {isFirstRowOfItem ? (
@@ -499,15 +494,8 @@ const GlassOrders = ({ orderType }) => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-orange-700">
-                        Bottle Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                        Box Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
                     </h2>
-                    {/* Socket connection indicator */}
-                    {/* <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                            {isConnected ? 'Live' : 'Offline'}
-                        </span>
-                    </div> */}
                 </div>
 
                 <div className="relative">
@@ -613,7 +601,7 @@ const GlassOrders = ({ orderType }) => {
             </div>
 
             {showModal && selectedOrder && selectedItem && (
-                <UpdateGlassQty
+                <UpdatePumpQty
                     isOpen={showModal}
                     onClose={handleClose}
                     orderData={selectedOrder}
@@ -625,4 +613,4 @@ const GlassOrders = ({ orderType }) => {
     );
 };
 
-export default GlassOrders;
+export default PumpOrders;

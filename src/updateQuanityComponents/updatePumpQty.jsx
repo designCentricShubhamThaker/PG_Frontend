@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
-const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
+const UpdatePumpQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -20,8 +20,8 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const { notifyProgressUpdate } = useSocket()
 
     useEffect(() => {
-        if (isOpen && itemData?.team_assignments?.glass) {
-            setAssignments(itemData.team_assignments.glass.map(assignment => ({
+        if (isOpen && itemData?.team_assignments?.pumps) {
+            setAssignments(itemData.team_assignments.pumps.map(assignment => ({
                 ...assignment,
                 todayQty: 0,
                 notes: ''
@@ -72,7 +72,7 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
             const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
-            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.GLASS);
+            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.PUMPS);
             const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (orderIndex !== -1) {
@@ -81,7 +81,7 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 existingOrders.push(updatedOrder);
             }
 
-            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.GLASS);
+            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.PUMPS);
 
             console.log('LocalStorage updated successfully');
         } catch (error) {
@@ -132,21 +132,21 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 }
             }
 
-            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/glass', {
-            //     orderNumber: orderData.order_number,
-            //     itemId: itemData._id,
-            //     updates
-            // });
-            const response = await axios.patch('http://localhost:5000/api/glass', {
+            const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/pumps', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates
             });
+            // const response = await axios.patch('http://localhost:5000/api/pumps', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
 
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
-               
+
 
                 if (notifyProgressUpdate) {
                     notifyProgressUpdate({
@@ -234,7 +234,7 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         <div className="bg-orange-600 text-white px-4 py-3 flex justify-between gap-4 rounded-md">
                             <div>
                                 <DialogTitle as="h2" className="text-xl font-bold">
-                                    Update Glass Production
+                                    Update Pump Production
                                     <p className="text-orange-100 text-sm">
                                         Order #{orderData?.order_number} - {itemData?.name}
                                     </p>
@@ -267,11 +267,10 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         <div className="bg-gradient-to-r from-orange-800 via-orange-600 to-orange-400 px-4 py-3 mt-6 rounded-md">
                             <div className="grid gap-4 text-white font-semibold text-sm items-center"
                                 style={{
-                                    gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr 1.5fr'
+                                    gridTemplateColumns: '2fr 1fr 1fr 1fr 4fr 2fr '
                                 }}>
-                                <div className="text-left">Bottle Name</div>
-                                <div className="text-center">Neck Size</div>
-                                <div className="text-center">Weight</div>
+                                <div className="text-left">Pump Name</div>
+                                <div className="text-left">Neck Type</div>
                                 <div className="text-center">Total Qty</div>
                                 <div className="text-center">Remaining</div>
                                 <div className="text-center">Progress</div>
@@ -292,24 +291,20 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                                         className={`border-b border-orange-100 px-6 py-4 ${bgColor} -mx-6 mb-4 last:mb-0`}>
                                         <div className="grid gap-4 text-sm items-center"
                                             style={{
-                                                gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr 1.5fr'
+                                               gridTemplateColumns: '2fr 1fr 1fr 1fr 4fr 2fr '
                                             }}>
 
                                             <div className="text-left">
-                                                <div className="font-medium text-orange-900">{assignment.glass_name}</div>
+                                                <div className="font-medium text-orange-900">{assignment.pump_name}</div>
                                                 <div className="text-xs text-gray-600">
                                                     {assignment.decoration} #{assignment.decoration_no}
                                                 </div>
                                             </div>
-
-                                            <div className="text-center text-orange-900">
-                                                {assignment.neck_size}mm
+                                            <div className="text-left">
+                                                <div className="font-medium text-orange-900">{assignment.neck_type}</div>
                                             </div>
 
-
-                                            <div className="text-center text-orange-900">
-                                                {assignment.weight}ml
-                                            </div>
+                                            
 
                                             <div className="text-center text-orange-900 font-medium">
                                                 {assignment.quantity}
@@ -396,4 +391,4 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     );
 };
 
-export default UpdateGlassQty;
+export default UpdatePumpQty;

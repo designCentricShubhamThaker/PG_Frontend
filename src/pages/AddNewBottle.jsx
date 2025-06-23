@@ -28,7 +28,8 @@ const BottleDataManager = () => {
 
 
 
-  const API_BASE = 'http://localhost:5000/api/bottledata';
+  // const API_BASE = 'http://localhost:5000/api/bottledata';
+  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/bottledata';
 
   const fetchBottles = async () => {
     try {

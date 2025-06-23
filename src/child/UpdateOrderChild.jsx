@@ -10,6 +10,7 @@ import { pumpData } from "../data/pumpData.js"
 import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/useAuth.jsx';
 
 
 const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
@@ -52,6 +53,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
   console.log(order);
 
   const { notifyOrderEdit } = useSocket()
+  const { user } = useAuth()
 
 
   const createDefaultTeamAssignment = (team) => {
@@ -425,13 +427,13 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         items: formattedItems
       };
 
-      // const response = await axios.put(`https://pg-backend-udfn.onrender.com/api/orders/${order._id}`, orderData);
-      const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
+      const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/orders/${order._id}`, orderData);
+      // const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
 
       if (response.data.success) {
         const updatedOrder = response.data.data;
 
-        const updateSuccess = updateDispatcherOrderInLocalStorage(updatedOrder);
+        const updateSuccess = updateDispatcherOrderInLocalStorage(updatedOrder ,user.team);
 
         if (!updateSuccess) {
           console.warn('Order updated in database but localStorage update failed');
