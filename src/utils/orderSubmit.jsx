@@ -53,25 +53,36 @@ export const handleSubmitOrder = async ({
 
         formattedItems.push({
           name: item.name,
-          glass: validGlassItems.map((glass) => ({
-            glass_name: glass.glass_name,
-            quantity: parseInt(glass.quantity, 10) || 0,
-            weight: glass.weight || "",
-            neck_size: glass.neck_size || "",
-            decoration: glass.decoration || "",
-            decoration_no: glass.decoration_no || "",
-            decoration_details: {
-              type: glass.decoration || "",
-              decoration_number: glass.decoration_no || ""
-            },
-            team: glass.team || "Glass Manufacturing - Mumbai",
-            status: "Pending",
-            team_tracking: {
-              total_completed_qty: 0,
-              completed_entries: [],
-              status: "Pending"
-            }
-          })),
+          glass: validGlassItems.map((glass) => {
+            // Parse decoration processes from the decoration key
+            const decorationKey = glass.decoration || "";
+
+            return {
+              glass_name: glass.glass_name,
+              quantity: parseInt(glass.quantity, 10) || 0,
+              weight: glass.weight || "",
+              neck_size: glass.neck_size || "",
+              decoration: decorationKey, // This is the key like "coating_printing_frosting"
+              decoration_no: glass.decoration_no || "",
+              decoration_details: {
+                type: decorationKey,
+                decoration_number: glass.decoration_no || "",
+                coating: decorationKey.includes('coating'),
+                printing: decorationKey.includes('printing'),
+                foiling: decorationKey.includes('foiling'),
+                frosting: decorationKey.includes('frosting')
+
+              },
+              team: glass.team || "Glass Manufacturing - Mumbai",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            };
+          }),
+
           caps: validCapItems.map((cap) => ({
             cap_name: cap.cap_name,
             neck_size: cap.neck_size || "",
@@ -86,11 +97,12 @@ export const handleSubmitOrder = async ({
               status: "Pending"
             }
           })),
+
           boxes: validBoxItems.map((box) => ({
             box_name: box.box_name,
             quantity: parseInt(box.quantity, 10) || 0,
             approval_code: box.approval_code || "",
-            team: box.team || "Box Manufacturing - Pune",
+            team: box.team || "Box Manufacturing - Bangalore",
             status: "Pending",
             team_tracking: {
               total_completed_qty: 0,
@@ -98,6 +110,7 @@ export const handleSubmitOrder = async ({
               status: "Pending"
             }
           })),
+
           pumps: validPumpItems.map((pump) => ({
             pump_name: pump.pump_name,
             neck_type: pump.neck_type || "",
@@ -115,47 +128,66 @@ export const handleSubmitOrder = async ({
     }
 
     if (!hasValidItems) {
-      setError("Please add at least one valid item with name and quantity in any team");
+      setError("Please add at least one valid item (glass, cap, box, or pump) with quantity");
       setIsSubmitting(false);
       return;
     }
 
     const orderData = {
-      order_number: orderNumber.trim(),
-      dispatcher_name: dispatcherName.trim(),
-      customer_name: customerName.trim(),
+      order_number: orderNumber,
+      dispatcher_name: dispatcherName,
+      customer_name: customerName,
       order_status: "Pending",
       items: formattedItems
     };
 
-    // const response = await axios.post("http://localhost:5000/api/orders", orderData);
-    const response = await axios.post("https://pg-backend-o05l.onrender.com/api/orders", orderData);
+    console.log("Submitting order data:", JSON.stringify(orderData, null, 2));
 
-    if (response.data.success) {
-      const newOrder = response.data.data;
-      console.log(newOrder);
-      addOrderToLocalStorage(newOrder);
+    if (isConnected) {
+      try {
+        const response = await axios.post("http://localhost:5000/api/orders", orderData, {
+          headers: {
+            "Content-Type": "application/json"
+          }
+        });
 
-      if (isConnected && notifyTeam) {
-        const notificationSent = notifyTeam(newOrder);
-        if (notificationSent) {
-          console.log("✅ Teams notified successfully about new order");
+        if (response.data.success) {
+          console.log("Order created successfully:", response.data);
+          addOrderToLocalStorage(response.data.data);
+          if (notifyTeam) {
+            notifyTeam(response.data.data);
+          }
+          if (onCreateOrder) {
+            onCreateOrder(response.data.data);
+          }
+          resetForm();
+          if (onClose) {
+            onClose();
+          }
+
+          setError("");
         } else {
-          console.warn("⚠️ Order created but team notification failed");
+          setError(response.data.message || "Failed to create order");
+        }
+      } catch (apiError) {
+        console.error("API Error:", apiError);
+        if (apiError.response?.data?.message) {
+          setError(apiError.response.data.message);
+        } else {
+          setError("Failed to create order. Please try again.");
         }
       }
-
-      if (onCreateOrder) onCreateOrder();
-
-      resetForm();
-      onClose();
     } else {
-      setError("Error creating order: " + (response.data.message || "Unknown error"));
-      setIsSubmitting(false);
+      if (onClose) {
+        onClose();
+      }
+      setError("");
     }
+
   } catch (error) {
-    console.error("Order creation error:", error);
-    setError("Error creating order: " + (error.response?.data?.message || error.message));
+    console.error("Error submitting order:", error);
+    setError("An unexpected error occurred. Please try again.");
+  } finally {
     setIsSubmitting(false);
   }
 };

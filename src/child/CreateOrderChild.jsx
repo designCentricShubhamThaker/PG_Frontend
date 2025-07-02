@@ -388,8 +388,13 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const handleTeamDetailChange = (itemIndex, assignmentIndex, team, field, value) => {
     const updatedItems = [...orderItems];
     updatedItems[itemIndex].teamAssignments[team][assignmentIndex][field] = value;
+    if (team === 'glass' && field === 'decoration') {
+      updatedItems[itemIndex].teamAssignments[team][assignmentIndex].printingSelected = value !== 'N/A' && value.trim() !== '';
+    }
+
     setOrderItems(updatedItems);
   };
+
 
   const handleOrderItemNameChange = (index, value) => {
     const updatedItems = [...orderItems];
