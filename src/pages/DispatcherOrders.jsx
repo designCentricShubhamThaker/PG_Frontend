@@ -75,25 +75,18 @@ const DispatcherOrders = ({ orderType }) => {
   const handleNewOrder = useCallback((orderData) => {
     try {
       const { orderData: newOrder, orderNumber, customerName, dispatcherName } = orderData;
-
       if (!newOrder || !newOrder._id) {
-       
-        
         return;
       }
-      // Only add to pending orders if we're viewing pending orders
       if (orderType === 'pending') {
         setOrders(prevOrders => {
-          // Check if order already exists
           const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
 
           let updatedOrders;
           if (existingOrderIndex !== -1) {
-            // Update existing order
             updatedOrders = [...prevOrders];
             updatedOrders[existingOrderIndex] = newOrder;
           } else {
-            // Add new order to the beginning of the list
             updatedOrders = [newOrder, ...prevOrders];
           }
           saveOrdersToLocalStorage(updatedOrders, 'pending', 'dispatcher');
@@ -101,8 +94,6 @@ const DispatcherOrders = ({ orderType }) => {
         });
 
         toast.success(`New order #${orderNumber} created by ${dispatcherName} for ${customerName}`);
-
-
       }
 
     } catch (error) {
@@ -114,22 +105,17 @@ const DispatcherOrders = ({ orderType }) => {
   const handleOrderUpdated = useCallback((updateData) => {
     try {
       const { orderData: updatedOrder, orderNumber } = updateData;
-
       if (!updatedOrder || !updatedOrder._id) {
         return;
       }
-
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.map(order =>
           order._id === updatedOrder._id ? updatedOrder : order
         );
-
         saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
         return updatedOrders;
       });
-
       toast.info(`Order #${orderNumber} has been updated`);
-
     } catch (error) {
       console.error('Error handling order update:', error);
     }
@@ -142,19 +128,15 @@ const DispatcherOrders = ({ orderType }) => {
 
   const calculateCompletedItems = (order) => {
     if (!order.item_ids || !Array.isArray(order.item_ids)) {
-      
       return 0;
     }
 
     let completedItemsCount = 0;
-    const totalItems = order.item_ids.length;
 
- 
-    order.item_ids.forEach((item, itemIndex) => {
+    order.item_ids.forEach((item) => {
       const assignments = item.team_assignments;
-
       if (!assignments || typeof assignments !== 'object') {
-        return;
+        return; // Skip items with no assignments
       }
 
       const teamsWithAssignments = Object.keys(assignments).filter(teamName => {
@@ -171,16 +153,15 @@ const DispatcherOrders = ({ orderType }) => {
       for (let teamName of teamsWithAssignments) {
         const teamAssignments = assignments[teamName];
         let teamCompleted = true;
-
         for (let assignment of teamAssignments) {
-
-          const isCompleted = assignment.team_tracking?.total_completed_qty >= assignment.quantity;
-
-          if (!isCompleted) {
+          const completedQty = assignment.team_tracking?.total_completed_qty || 0;
+          const requiredQty = assignment.quantity || 0;
+          if (completedQty < requiredQty) {
             teamCompleted = false;
             break;
-          } 
+          }
         }
+
         if (!teamCompleted) {
           itemFullyCompleted = false;
           break;
@@ -189,51 +170,49 @@ const DispatcherOrders = ({ orderType }) => {
 
       if (itemFullyCompleted) {
         completedItemsCount++;
-      } else {
       }
     });
+
     return completedItemsCount;
   };
 
-  
+
   const calculateCompletionPercentage = (order) => {
     if (!order || !order.item_ids || order.item_ids.length === 0) {
       return 0;
     }
-
     const totalItems = order.item_ids.length;
     const completedItems = calculateCompletedItems(order);
+    if (totalItems === 0) return 0;
     const percentage = Math.round((completedItems / totalItems) * 100);
-    return percentage;
-  }
+    return Math.min(percentage, 100);
+  };
 
   const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
     try {
-
+      console.log(`Moving order ${order.order_number} from ${fromCategory} to ${toCategory}`);
       const sourceOrders = getOrdersFromLocalStorage(fromCategory, 'dispatcher') || [];
       const updatedSourceOrders = sourceOrders.filter(o => o._id !== order._id);
       saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, 'dispatcher');
-
       const destOrders = getOrdersFromLocalStorage(toCategory, 'dispatcher') || [];
       const existingIndex = destOrders.findIndex(o => o._id === order._id);
 
       if (existingIndex !== -1) {
-
         destOrders[existingIndex] = order;
       } else {
         destOrders.unshift(order);
       }
-
       saveOrdersToLocalStorage(destOrders, toCategory, 'dispatcher');
-  
+      console.log(`Successfully moved order ${order.order_number}`);
     } catch (error) {
-
+      console.error('Error moving order between categories:', error);
     }
   };
 
   const handleProgressUpdate = useCallback((progressData) => {
     console.log('📈 Received progress update:', progressData);
     const orderNumber = progressData.orderNumber || progressData.order_number;
+
     if (!orderNumber) {
       console.warn('No order number in progress update');
       return;
@@ -243,39 +222,29 @@ const DispatcherOrders = ({ orderType }) => {
       const updatedOrders = prevOrders.map(order => {
         if (order.order_number === orderNumber) {
           const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
-
-          const teamType = progressData.team?.toLowerCase().includes('glass') ? 'glass' :
-            progressData.team?.toLowerCase().includes('box') ? 'boxes' :
-              progressData.team?.toLowerCase().includes('cap') ? 'caps' :
-                progressData.team?.toLowerCase().includes('pump') ? 'pumps' : null;
-
           const mergedOrder = {
             ...order,
             ...updatedOrder,
             item_ids: order.item_ids.map(existingItem => {
               const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
               if (updatedItem) {
-                const mergedTeamAssignments = {
-                  ...existingItem.team_assignments
-                };
-
-                if (teamType && updatedItem.team_assignments?.[teamType]) {
-                  mergedTeamAssignments[teamType] = updatedItem.team_assignments[teamType];
-                }
-
                 return {
                   ...existingItem,
                   ...updatedItem,
-                  team_assignments: mergedTeamAssignments
+                  team_assignments: {
+                    ...existingItem.team_assignments,
+                    ...updatedItem.team_assignments
+                  }
                 };
               }
               return existingItem;
             })
           };
+
           const completedItems = calculateCompletedItems(mergedOrder);
           const totalItems = calculateTotalItems(mergedOrder);
           const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-
+          console.log(`Order ${orderNumber}: ${completedItems}/${totalItems} items completed (${completionPercentage}%)`);
           const previousStatus = order.order_status;
           const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
 
@@ -283,28 +252,28 @@ const DispatcherOrders = ({ orderType }) => {
             ...mergedOrder,
             order_status: newStatus
           };
+          console.log(`Order ${orderNumber} status: ${previousStatus} -> ${newStatus}`);
 
           if (previousStatus !== newStatus) {
-            if (newStatus === 'Completed') {
+            if (newStatus === 'Completed' && orderType === 'pending') {
               moveOrderBetweenCategories(finalOrder, 'pending', 'completed');
-            } else if (newStatus === 'Pending' && previousStatus === 'Completed') {
+              toast.success(`Order #${orderNumber} has been completed!`);
+            } else if (newStatus === 'Pending' && previousStatus === 'Completed' && orderType === 'completed') {
               moveOrderBetweenCategories(finalOrder, 'completed', 'pending');
+              toast.info(`Order #${orderNumber} moved back to pending`);
             }
-          } else {
-            updateDispatcherOrderInLocalStorage(finalOrder, 'dispatcher');
           }
+          updateDispatcherOrderInLocalStorage(finalOrder, 'dispatcher');
 
           return finalOrder;
         }
         return order;
       });
-
-      // Save to current category localStorage
       saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
       return updatedOrders;
     });
 
-  }, [orderType, moveOrderBetweenCategories, calculateCompletedItems, calculateTotalItems]);
+  }, [orderType]);
 
   useEffect(() => {
     if (orders.length === 0) {
@@ -313,16 +282,16 @@ const DispatcherOrders = ({ orderType }) => {
     }
 
     let filteredByType = orders.filter(order => {
-      const isCompleted = order.order_status === 'Completed';
+      const completionPercentage = calculateCompletionPercentage(order);
+      const isCompleted = completionPercentage === 100 || order.order_status === 'Completed';
+
       if (orderType === 'pending') {
-        const shouldShow = !isCompleted;
-        return shouldShow;
+        return !isCompleted;
       }
       if (orderType === 'completed') {
-        const shouldShow = isCompleted;
-        return shouldShow;
+        return isCompleted;
       }
-      return true; 
+      return true;
     });
 
     if (searchTerm) {
@@ -334,11 +303,10 @@ const DispatcherOrders = ({ orderType }) => {
     }
 
     setFilteredOrders(filteredByType);
-
   }, [orders, orderType, searchTerm]);
 
-  const handleOrderDeleted = useCallback((deleteData) => {
 
+  const handleOrderDeleted = useCallback((deleteData) => {
     try {
       const { orderId, orderNumber } = deleteData;
       if (!orderId) {
@@ -355,7 +323,7 @@ const DispatcherOrders = ({ orderType }) => {
       toast.success(`Order #${orderNumber} has been deleted successfully`);
 
     } catch (error) {
-     
+
     }
   }, [orderType]);
 
@@ -437,7 +405,6 @@ const DispatcherOrders = ({ orderType }) => {
 
       const assignedTeams = getAssignedTeams(orderToDelete);
 
-      // API call (uncomment the appropriate one)
       // const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}`);
       const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
 

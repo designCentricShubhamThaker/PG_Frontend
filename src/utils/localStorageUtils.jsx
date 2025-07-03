@@ -13,7 +13,7 @@ const TEAMS = {
   PUMPS: 'pumps',
   CAP: 'caps',
   MARKETING: 'marketing' ,
-  DECO_PRINT: "deco_print"
+  PRINTING: "printing"
 };
 
 // Teams that behave like dispatcher (use order_status for completed/pending logic)

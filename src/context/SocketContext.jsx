@@ -60,7 +60,6 @@ export const SocketProvider = ({ children }) => {
             console.log('✏️ Order updated received:', updateData);
         });
 
-        // Add debug logging for progress updates
         socketInstance.on('team-progress-updated', (progressData) => {
             console.log('📈 Progress update received in SocketProvider:', progressData);
         });
@@ -94,28 +93,17 @@ export const SocketProvider = ({ children }) => {
 
         try {
             const assignedTeams = [];
-
-            // DEBUG: Log the order data structure
-            console.log('🔍 Order data structure:', JSON.stringify(orderData, null, 2));
-
             orderData.item_ids?.forEach(item => {
-                console.log('🔍 Processing item:', item.name);
-                console.log('🔍 Item team_assignments:', item.team_assignments);
 
                 if (item.team_assignments) {
                     Object.keys(item.team_assignments).forEach(team => {
-                        console.log(`🔍 Checking team: ${team}, assignments:`, item.team_assignments[team]);
-
+                
                         if (item.team_assignments[team].length > 0 && !assignedTeams.includes(team)) {
-                            assignedTeams.push(team);
-                            console.log(`✅ Added team: ${team}`);
+                            assignedTeams.push(team);  console.log(`✅ Added team: ${team}`);
                         }
                     });
                 }
             });
-
-            console.log('🔍 Final assigned teams:', assignedTeams);
-
             const notificationData = {
                 order: orderData,
                 assignedTeams,

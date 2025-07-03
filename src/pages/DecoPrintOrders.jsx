@@ -1,3 +1,6 @@
+
+
+
 import { Search, Pencil, Package } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
@@ -12,8 +15,8 @@ import {
     saveOrdersToLocalStorage as saveTeamOrdersToLocalStorage,
     updateOrderInLocalStorage
 } from '../utils/localStorageUtils.jsx';
-import UpdateGlassQty from '../updateQuanityComponents/updateGlassQty.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
+import UpdatePrintQty from '../updateQuanityComponents/updatePrintQty.jsx';
 
 const DecoPrintOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
@@ -61,7 +64,7 @@ const DecoPrintOrders = ({ orderType }) => {
             updatedOrder.order_status = newStatus;
         }
 
-        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.DECO_PRINT);
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PRINTING);
 
         return updatedOrder;
     };
@@ -107,7 +110,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 updatedOrders = [newOrder, ...prevOrders];
                 console.log('Added new order:', newOrder.order_number);
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.DECO_PRINT);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
 
             return updatedOrders;
         });
@@ -128,7 +131,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 console.log('Order removed from glass team:', updatedOrder.order_number);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.DECO_PRINT);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -138,7 +141,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 console.log('Updated order has no glass assignments, removing if exists');
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.DECO_PRINT);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -152,7 +155,7 @@ const DecoPrintOrders = ({ orderType }) => {
 
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.DECO_PRINT);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -168,7 +171,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
 
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.DECO_PRINT);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
 
             return updatedOrders;
         });
@@ -191,7 +194,7 @@ const DecoPrintOrders = ({ orderType }) => {
 
             setOrders(prevOrders => {
                 const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.DECO_PRINT);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
                 return updatedOrders;
             });
 
@@ -229,8 +232,8 @@ const DecoPrintOrders = ({ orderType }) => {
     const fetchGlassOrders = async (type = orderType) => {
         try {
             setLoading(true);
-            if (hasTeamOrdersInLocalStorage(type, TEAMS.DECO_PRINT)) {
-                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.DECO_PRINT);
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
                 setOrders(cachedOrders);
                 setFilteredOrders(cachedOrders);
                 setLoading(false);
@@ -238,10 +241,9 @@ const DecoPrintOrders = ({ orderType }) => {
             }
 
             const response = await axios.get(`http://localhost:5000/api/print?orderType=${type}`);
-            console.log(response.data.data)
             const fetchedOrders = response.data.data || [];
 
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.DECO_PRINT);
+            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.PRINTING);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
             setLoading(false);
@@ -396,8 +398,8 @@ const DecoPrintOrders = ({ orderType }) => {
                                     currentRowInOrder++;
 
                                     // Calculate remaining qty and status for this assignment
-                                    const remainingQty = glass ? getRemainingQty(glass.glass_item_id) : 'N/A';
-                                    const status = glass ? getAssignmentStatus(glass.glass_item_id) : 'N/A';
+                                    const remainingQty = glass ? getRemainingQty(glass) : 'N/A';
+                                    const status = glass ? getAssignmentStatus(glass) : 'N/A';
 
                                     // Status styling
                                     const getStatusStyle = (status) => {
@@ -438,11 +440,11 @@ const DecoPrintOrders = ({ orderType }) => {
                                             </div>
 
                                             <div className="text-left text-orange-900 px-2">
-                                                {glass ? (glass.glass_item_id.glass_name) : 'N/A'}
+                                                {glass ? (glass.glass_name || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-orange-900">
-                                                {glass ? (glass.glass_item_id.quantity || 'N/A') : 'N/A'}
+                                                {glass ? (glass.quantity || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left">
@@ -466,7 +468,7 @@ const DecoPrintOrders = ({ orderType }) => {
                                             </div>
 
                                             <div className="text-left text-gray-800">
-                                                {glass ? (glass.glass_item_id.decoration_no || 'N/A') : 'N/A'}
+                                                {glass ? (glass.decoration_no || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-center">
@@ -614,7 +616,7 @@ const DecoPrintOrders = ({ orderType }) => {
             </div>
 
             {showModal && selectedOrder && selectedItem && (
-                <UpdateGlassQty
+                <UpdatePrintQty
                     isOpen={showModal}
                     onClose={handleClose}
                     orderData={selectedOrder}

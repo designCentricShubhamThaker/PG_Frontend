@@ -62,49 +62,47 @@ const App = () => {
               path="/dashboard/boxes"
               element={<ProtectedRoutes element={<BoxesDashboard />} allowedRoles={['user']} allowedTeams={['boxes']} />}
             />
-         
 
             <Route
-              path="/dashboard/decoration/deco_print"
+              path="/dashboard/printing"
               element={
                 <ProtectedRoutes
                   element={<DecoPrintDashboard />}
                   allowedRoles={['user']}
-                  allowedTeams={['decoration']}
-                  allowedSubteams={['deco_print']}
+                  allowedTeams={['printing']}
                 />
               }
             />
             <Route
-              path="/dashboard/decoration/frost"
+              path="/dashboard/frosting"
               element={
                 <ProtectedRoutes
                   element={<DecoFrostDashboard />}
                   allowedRoles={['user']}
-                  allowedTeams={['decoration']}
-                  allowedSubteams={['frost']}
+                  allowedTeams={['frosting']}
+
                 />
               }
             />
             <Route
-              path="/dashboard/decoration/deco_coat"
+              path="/dashboard/coating"
               element={
                 <ProtectedRoutes
                   element={<DecoCoatDashboard />}
                   allowedRoles={['user']}
-                  allowedTeams={['decoration']}
-                  allowedSubteams={['deco_coat']}
+                  allowedTeams={['coating']}
+
                 />
               }
             />
             <Route
-              path="/dashboard/decoration/foil"
+              path="/dashboard/foiling"
               element={
                 <ProtectedRoutes
                   element={<DecoFoilDashbaord />}
                   allowedRoles={['user']}
-                  allowedTeams={['decoration']}
-                  allowedSubteams={['foil']}
+                  allowedTeams={['foiling']}
+
                 />
               }
             />

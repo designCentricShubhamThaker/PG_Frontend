@@ -140,9 +140,6 @@ export const handleSubmitOrder = async ({
       order_status: "Pending",
       items: formattedItems
     };
-
-    console.log("Submitting order data:", JSON.stringify(orderData, null, 2));
-
     if (isConnected) {
       try {
         const response = await axios.post("http://localhost:5000/api/orders", orderData, {
