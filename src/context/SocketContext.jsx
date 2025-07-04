@@ -193,15 +193,18 @@ export const SocketProvider = ({ children }) => {
             console.log('📤 Sending progress update:', progressData);
 
             const notificationData = {
-                orderNumber: progressData.orderNumber,
-                itemName: progressData.itemName,
-                team: progressData.team,
-                updates: progressData.updates,
-                updatedOrder: progressData.updatedOrder,
-                timestamp: new Date().toISOString(),
-                customerName: progressData.customerName,
-                dispatcherName: progressData.dispatcherName
-            };
+  orderNumber: progressData.orderNumber,
+  itemName: progressData.itemName,
+  team: progressData.team,
+  updates: progressData.updates,
+  updatedOrder: progressData.updatedOrder,
+  timestamp: new Date().toISOString(),
+  customerName: progressData.customerName,
+  dispatcherName: progressData.dispatcherName,
+  completedItemId: progressData.completedItemId,
+  isFullyCompleted: progressData.isFullyCompleted
+};
+
 
             console.log('📊 Progress notification data:', {
                 orderNumber: notificationData.orderNumber,
@@ -273,3 +276,6 @@ export const SocketProvider = ({ children }) => {
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;
 };
+
+
+

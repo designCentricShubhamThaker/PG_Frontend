@@ -1,12 +1,8 @@
-
-
-
-import { Search, Pencil, Package } from 'lucide-react';
+import { Search, Package } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
 import { toast } from 'react-hot-toast';
-
 import {
     TEAMS,
     deleteOrderFromLocalStorage,
@@ -45,9 +41,9 @@ const DecoPrintOrders = ({ orderType }) => {
     };
 
     const isItemCompleted = (item) => {
-        const glassAssignments = item.team_assignments?.printing || [];
-        if (glassAssignments.length === 0) return false;
-        return glassAssignments.every(assignment => getRemainingQty(assignment) === 0);
+        const pritningAssignments = item.team_assignments?.printing || [];
+        if (pritningAssignments.length === 0) return false;
+        return pritningAssignments.every(assignment => getRemainingQty(assignment) === 0);
     };
 
     const isOrderCompleted = (order) => {
@@ -63,9 +59,7 @@ const DecoPrintOrders = ({ orderType }) => {
         if (updatedOrder.order_status !== newStatus) {
             updatedOrder.order_status = newStatus;
         }
-
         updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PRINTING);
-
         return updatedOrder;
     };
 
@@ -77,13 +71,11 @@ const DecoPrintOrders = ({ orderType }) => {
 
     const handleNewOrder = useCallback((orderData) => {
         console.log('📦 Glass team received new order:', orderData);
-
         if (!orderData.orderData) return;
-
         const newOrder = orderData.orderData;
 
         if (!hasGlassAssignments(newOrder)) {
-            console.log('Order has no glass assignments, ignoring');
+            console.log('Order has no pritning assignments, ignoring');
             return;
         }
 
@@ -100,35 +92,27 @@ const DecoPrintOrders = ({ orderType }) => {
 
             let updatedOrders;
             if (existingOrderIndex >= 0) {
-
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = newOrder;
-                console.log('Updated existing order:', newOrder.order_number);
-
             } else {
-
                 updatedOrders = [newOrder, ...prevOrders];
                 console.log('Added new order:', newOrder.order_number);
             }
             saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-
             return updatedOrders;
         });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
         console.log('✏️ Glass team received order update:', updateData);
-
         if (!updateData.orderData) return;
-
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
             if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from glass team:', updatedOrder.order_number);
+                console.log('Order removed from pritning team:', updatedOrder.order_number);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
                     saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
@@ -138,7 +122,7 @@ const DecoPrintOrders = ({ orderType }) => {
             }
 
             if (!hasGlassAssignments(updatedOrder)) {
-                console.log('Updated order has no glass assignments, removing if exists');
+                console.log('Updated order has no pritning assignments, removing if exists');
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
                     saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
@@ -170,17 +154,10 @@ const DecoPrintOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-
             saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-
             return updatedOrders;
         });
 
-        if (updateData.editedFields && updateData.editedFields.length > 0) {
-            console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
-            // You could show a toast notification here if you have a notification system
-            toast.success("order progress updated !")
-        }
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
@@ -201,12 +178,8 @@ const DecoPrintOrders = ({ orderType }) => {
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-
-            // Remove from localStorage
             deleteOrderFromLocalStorage(orderId);
-
             toast.success(`Order #${orderNumber} has been deleted`);
-            console.log(`✅ Order #${orderNumber} removed from glass team view`);
 
         } catch (error) {
             console.error('Error handling order delete notification:', error);
@@ -214,20 +187,71 @@ const DecoPrintOrders = ({ orderType }) => {
     }, [orderType]);
 
 
-    useEffect(() => {
-        if (!socket) return;
-        socket.on('new-order', handleNewOrder);
-        socket.on('order-updated', handleOrderUpdate);
-        socket.on('order-deleted', handleOrderDeleted);
+ useEffect(() => {
+    if (!socket) return;
 
+    socket.on('new-order', handleNewOrder);
+    socket.on('order-updated', handleOrderUpdate);
+    socket.on('order-deleted', handleOrderDeleted);
+    
+    // Handle progress updates
+    socket.on('team-progress-updated', (progressData) => {
+        console.log('📈 Received progress update in PRINTING team:', progressData);
 
-        return () => {
-            socket.off('new-order', handleNewOrder);
-            socket.off('order-updated', handleOrderUpdate);
-            socket.off('order-deleted', handleOrderDeleted);
+        const updatedOrder = progressData.updatedOrder;
+        if (!updatedOrder) return;
 
-        };
-    }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+        setOrders(prevOrders => {
+            const index = prevOrders.findIndex(order => order._id === updatedOrder._id);
+            let updatedOrders = [...prevOrders];
+
+            if (index >= 0) {
+                updatedOrders[index] = updatedOrder;
+            } else {
+                updatedOrders = [updatedOrder, ...prevOrders];
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+            return updatedOrders;
+        });
+    });
+
+    // 🔥 NEW: Handle sequential assignments
+    socket.on('new-sequential-assignment', (assignmentData) => {
+        console.log('🔄 Received sequential assignment in PRINTING team:', assignmentData);
+        
+        const { orderData, decorationType, itemCount, fromTeam, message } = assignmentData;
+        
+        // Show notification to user
+        toast.success(`${message} - ${itemCount} items from ${fromTeam} team`);
+        
+        // Update orders state with new assignments
+        setOrders(prevOrders => {
+            const index = prevOrders.findIndex(order => order._id === orderData._id);
+            let updatedOrders = [...prevOrders];
+
+            if (index >= 0) {
+                // Update existing order
+                updatedOrders[index] = orderData;
+            } else {
+                // Add new order if it doesn't exist
+                updatedOrders = [orderData, ...prevOrders];
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+            return updatedOrders;
+        });
+    });
+
+    return () => {
+        socket.off('new-order', handleNewOrder);
+        socket.off('order-updated', handleOrderUpdate);
+        socket.off('order-deleted', handleOrderDeleted);
+        socket.off('team-progress-updated');
+        socket.off('new-sequential-assignment'); // 👈 cleanup
+    };
+}, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted, orderType]);
+
 
     const fetchGlassOrders = async (type = orderType) => {
         try {
@@ -248,7 +272,7 @@ const DecoPrintOrders = ({ orderType }) => {
             setFilteredOrders(fetchedOrders);
             setLoading(false);
         } catch (err) {
-            setError('Failed to fetch glass orders: ' + (err.response?.data?.message || err.message));
+            setError('Failed to fetch pritning orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
         }
     };
@@ -271,12 +295,12 @@ const DecoPrintOrders = ({ orderType }) => {
                     if (item.name?.toLowerCase().includes(searchTerm.toLowerCase())) {
                         return true;
                     }
-                    return item.team_assignments?.printing?.some(glass => {
-                        return glass.printing_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            glass.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
+                    return item.team_assignments?.printing?.some(pritning => {
+                        return pritning.printing_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            pritning.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            pritning.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            pritning.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            pritning.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
                     });
                 });
             });
@@ -342,7 +366,7 @@ const DecoPrintOrders = ({ orderType }) => {
                     <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
                         <Package className="w-8 h-8 text-orange-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No glass orders found</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No printing orders found</h3>
                     <p className="text-sm text-gray-500 text-center max-w-sm">
                         When you receive new orders, they will appear here for easy management and tracking.
                     </p>
@@ -374,12 +398,11 @@ const DecoPrintOrders = ({ orderType }) => {
                     </div>
                 </div>
 
-                {/* Data Rows */}
                 {currentOrders.map((order, orderIndex) => {
                     let totalOrderRows = 0;
                     order.item_ids?.forEach(item => {
-                        const glassAssignments = item.team_assignments?.printing || [];
-                        totalOrderRows += Math.max(1, glassAssignments.length);
+                        const pritningAssignments = item.team_assignments?.printing || [];
+                        totalOrderRows += Math.max(1, pritningAssignments.length);
                     });
 
                     let currentRowInOrder = 0;
@@ -387,21 +410,18 @@ const DecoPrintOrders = ({ orderType }) => {
                     return (
                         <div key={`order-${order._id}`} className="bg-white rounded-lg shadow-sm border border-orange-200 mb-3 overflow-hidden">
                             {order.item_ids?.map((item, itemIndex) => {
-                                const glassAssignments = item.team_assignments?.printing || [];
-                                const assignments = glassAssignments.length === 0 ? [null] : glassAssignments;
+                                const pritningAssignments = item.team_assignments?.printing || [];
+                                const assignments = pritningAssignments.length === 0 ? [null] : pritningAssignments;
                                 const bgColor = colorClasses[itemIndex % colorClasses.length];
 
-                                return assignments.map((glass, assignmentIndex) => {
+                                return assignments.map((pritning, assignmentIndex) => {
                                     const isFirstRowOfOrder = currentRowInOrder === 0;
                                     const isFirstRowOfItem = assignmentIndex === 0;
                                     const isLastRowOfOrder = currentRowInOrder === totalOrderRows - 1;
                                     currentRowInOrder++;
+                                    const remainingQty = pritning ? getRemainingQty(pritning) : 'N/A';
+                                    const status = pritning ? getAssignmentStatus(pritning) : 'N/A';
 
-                                    // Calculate remaining qty and status for this assignment
-                                    const remainingQty = glass ? getRemainingQty(glass) : 'N/A';
-                                    const status = glass ? getAssignmentStatus(glass) : 'N/A';
-
-                                    // Status styling
                                     const getStatusStyle = (status) => {
                                         switch (status) {
                                             case 'Completed':
@@ -417,7 +437,7 @@ const DecoPrintOrders = ({ orderType }) => {
 
                                     return (
                                         <div
-                                            key={`${order._id}-${item._id}-${glass?._id || 'empty'}-${assignmentIndex}`}
+                                            key={`${order._id}-${item._id}-${pritning?._id || 'empty'}-${assignmentIndex}`}
                                             className={`grid gap-2 items-center py-2 px-3 text-xs ${bgColor} ${!isLastRowOfOrder ? 'border-b border-orange-100' : ''}`}
                                             style={{
                                                 gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
@@ -440,11 +460,11 @@ const DecoPrintOrders = ({ orderType }) => {
                                             </div>
 
                                             <div className="text-left text-orange-900 px-2">
-                                                {glass ? (glass.glass_name || 'N/A') : 'N/A'}
+                                                {pritning ? (pritning.bottle || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-orange-900">
-                                                {glass ? (glass.quantity || 'N/A') : 'N/A'}
+                                                {pritning ? (pritning.quantity || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left">
@@ -460,15 +480,15 @@ const DecoPrintOrders = ({ orderType }) => {
                                             </div>
 
                                             <div className="text-left text-orange-900">
-                                                {glass ? (glass.neck_size || 'N/A') : 'N/A'}
+                                                {pritning ? (pritning.neck_size || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-gray-800">
-                                                {glass ? (glass.weight || 'N/A') : 'N/A'}
+                                                {pritning ? (pritning.weight || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-gray-800">
-                                                {glass ? (glass.decoration_no || 'N/A') : 'N/A'}
+                                                {pritning ? (pritning.decoration_no || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-center">
@@ -502,17 +522,9 @@ const DecoPrintOrders = ({ orderType }) => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-orange-700">
-                        Bottle Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
-                    </h2>
-                    {/* Socket connection indicator */}
-                    {/* <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                            {isConnected ? 'Live' : 'Offline'}
-                        </span>
-                    </div> */}
+                        Printing Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                    </h2>        
                 </div>
-
                 <div className="relative">
                     <input
                         type="text"
@@ -526,7 +538,6 @@ const DecoPrintOrders = ({ orderType }) => {
                     </div>
                 </div>
             </div>
-
             {error && (
                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
                     {error}
@@ -629,3 +640,5 @@ const DecoPrintOrders = ({ orderType }) => {
 };
 
 export default DecoPrintOrders;
+
+

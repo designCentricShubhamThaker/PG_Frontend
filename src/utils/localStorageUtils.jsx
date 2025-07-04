@@ -91,7 +91,7 @@ const updateDispatcherOrderInLocalStorage = (updatedOrder, team = TEAMS.DISPATCH
     const completedSaved = saveOrdersToLocalStorage(newCompletedOrders, 'completed', team);
     
     if (pendingSaved && completedSaved) {
-      console.log(`${team} order ${orderId} updated and moved to ${newOrderType}`);
+      
       return true;
     }
     

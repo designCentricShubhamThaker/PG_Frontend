@@ -101,7 +101,6 @@ const DispatcherOrders = ({ orderType }) => {
     }
   }, [orderType]);
 
-
   const handleOrderUpdated = useCallback((updateData) => {
     try {
       const { orderData: updatedOrder, orderNumber } = updateData;
@@ -126,6 +125,7 @@ const DispatcherOrders = ({ orderType }) => {
     return order.item_ids.length;
   };
 
+  // FIXED: Correct calculation of completed items
   const calculateCompletedItems = (order) => {
     if (!order.item_ids || !Array.isArray(order.item_ids)) {
       return 0;
@@ -136,39 +136,35 @@ const DispatcherOrders = ({ orderType }) => {
     order.item_ids.forEach((item) => {
       const assignments = item.team_assignments;
       if (!assignments || typeof assignments !== 'object') {
-        return; // Skip items with no assignments
+        return; // Skip this item if no assignments
       }
 
-      const teamsWithAssignments = Object.keys(assignments).filter(teamName => {
+      // Collect ALL assignments from ALL teams for this specific item
+      let allAssignmentsForThisItem = [];
+
+      // Loop through each team (glass, caps, boxes, pumps, etc.)
+      Object.keys(assignments).forEach(teamName => {
         const teamAssignments = assignments[teamName];
-        return Array.isArray(teamAssignments) && teamAssignments.length > 0;
+        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
+          // Add all assignments from this team to our collection
+          allAssignmentsForThisItem.push(...teamAssignments);
+        }
       });
 
-      if (teamsWithAssignments.length === 0) {
+      // If this item has no assignments at all, skip it
+      if (allAssignmentsForThisItem.length === 0) {
         return;
       }
 
-      let itemFullyCompleted = true;
+      // Now check if EVERY SINGLE assignment for this item is completed
+      const isThisItemCompleted = allAssignmentsForThisItem.every(assignment => {
+        const completedQty = assignment.team_tracking?.total_completed_qty || 0;
+        const requiredQty = assignment.quantity || 0;
+        return completedQty >= requiredQty;
+      });
 
-      for (let teamName of teamsWithAssignments) {
-        const teamAssignments = assignments[teamName];
-        let teamCompleted = true;
-        for (let assignment of teamAssignments) {
-          const completedQty = assignment.team_tracking?.total_completed_qty || 0;
-          const requiredQty = assignment.quantity || 0;
-          if (completedQty < requiredQty) {
-            teamCompleted = false;
-            break;
-          }
-        }
-
-        if (!teamCompleted) {
-          itemFullyCompleted = false;
-          break;
-        }
-      }
-
-      if (itemFullyCompleted) {
+      // If all assignments for this item are completed, count it
+      if (isThisItemCompleted) {
         completedItemsCount++;
       }
     });
@@ -176,16 +172,64 @@ const DispatcherOrders = ({ orderType }) => {
     return completedItemsCount;
   };
 
-
+  // FIXED: Correct calculation of completion percentage
   const calculateCompletionPercentage = (order) => {
-    if (!order || !order.item_ids || order.item_ids.length === 0) {
+    if (!order || !order.item_ids || !Array.isArray(order.item_ids) || order.item_ids.length === 0) {
       return 0;
     }
+
     const totalItems = order.item_ids.length;
     const completedItems = calculateCompletedItems(order);
+
     if (totalItems === 0) return 0;
+
     const percentage = Math.round((completedItems / totalItems) * 100);
     return Math.min(percentage, 100);
+  };
+
+  // Enhanced debug function
+  const debugProgressCalculation = (order) => {
+    console.log(`\n=== DEBUG: Order ${order.order_number} ===`);
+    console.log(`Total items: ${order.item_ids.length}`);
+
+    order.item_ids.forEach((item, index) => {
+      console.log(`\nItem ${index + 1} (${item.name}):`);
+
+      const assignments = item.team_assignments;
+      if (!assignments || typeof assignments !== 'object') {
+        console.log('  No assignments found');
+        return;
+      }
+
+      let allAssignments = [];
+
+      Object.keys(assignments).forEach(teamName => {
+        const teamAssignments = assignments[teamName];
+        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
+          console.log(`  ${teamName}: ${teamAssignments.length} assignments`);
+          teamAssignments.forEach(assignment => {
+            const completed = assignment.team_tracking?.total_completed_qty || 0;
+            const required = assignment.quantity || 0;
+            console.log(`    - ${assignment.glass_name || assignment.box_name || assignment.cap_name || assignment.pump_name || 'Assignment'}: ${completed}/${required} ${completed >= required ? '✓' : '✗'}`);
+          });
+          allAssignments.push(...teamAssignments);
+        }
+      });
+
+      const itemCompleted = allAssignments.every(assignment => {
+        const completed = assignment.team_tracking?.total_completed_qty || 0;
+        const required = assignment.quantity || 0;
+        return completed >= required;
+      });
+
+      console.log(`  Item ${index + 1} completed: ${itemCompleted ? '✓' : '✗'} (${allAssignments.length} total assignments)`);
+    });
+
+    const completedItems = calculateCompletedItems(order);
+    const percentage = calculateCompletionPercentage(order);
+    console.log(`\nCompleted items: ${completedItems}/${order.item_ids.length}`);
+    console.log(`Progress: ${percentage}%`);
+    console.log(`=== END DEBUG ===\n`);
   };
 
   const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
@@ -227,24 +271,59 @@ const DispatcherOrders = ({ orderType }) => {
             ...updatedOrder,
             item_ids: order.item_ids.map(existingItem => {
               const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
-              if (updatedItem) {
-                return {
-                  ...existingItem,
-                  ...updatedItem,
-                  team_assignments: {
-                    ...existingItem.team_assignments,
-                    ...updatedItem.team_assignments
+              if (!updatedItem) return existingItem;
+
+              // Merge team assignments deeply
+              const mergedAssignments = {};
+              const allTeams = new Set([
+                ...Object.keys(existingItem.team_assignments || {}),
+                ...Object.keys(updatedItem.team_assignments || {})
+              ]);
+
+              allTeams.forEach(team => {
+                const existingTeamAssignments = existingItem.team_assignments?.[team] || [];
+                const updatedTeamAssignments = updatedItem.team_assignments?.[team] || [];
+
+                const mergedTeamAssignments = existingTeamAssignments.map(assign => {
+                  const updated = updatedTeamAssignments.find(u => u._id === assign._id);
+                  return updated ? { ...assign, ...updated } : assign;
+                });
+
+                updatedTeamAssignments.forEach(updated => {
+                  if (!mergedTeamAssignments.find(assign => assign._id === updated._id)) {
+                    mergedTeamAssignments.push(updated);
                   }
-                };
-              }
-              return existingItem;
+                });
+
+                mergedAssignments[team] = mergedTeamAssignments;
+              });
+
+              // ✅ ✅ ✅ ADD THIS BLOCK BELOW TO CALCULATE item_status
+              const isItemCompleted = Object.values(mergedAssignments).flat().every(assign => {
+                const completedQty = assign.team_tracking?.total_completed_qty || 0;
+                const requiredQty = assign.quantity || 0;
+                return completedQty >= requiredQty;
+              });
+
+              return {
+                ...existingItem,
+                ...updatedItem,
+                team_assignments: mergedAssignments,
+                item_status: isItemCompleted ? 'Completed' : 'Pending' // ✅ Add this field to the item
+              };
             })
+
+
           };
+
+          // Debug the progress calculation
+          console.log(`\n🔍 Debugging progress for order ${orderNumber}:`);
+          debugProgressCalculation(mergedOrder);
 
           const completedItems = calculateCompletedItems(mergedOrder);
           const totalItems = calculateTotalItems(mergedOrder);
           const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-          console.log(`Order ${orderNumber}: ${completedItems}/${totalItems} items completed (${completionPercentage}%)`);
+
           const previousStatus = order.order_status;
           const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
 
@@ -252,7 +331,8 @@ const DispatcherOrders = ({ orderType }) => {
             ...mergedOrder,
             order_status: newStatus
           };
-          console.log(`Order ${orderNumber} status: ${previousStatus} -> ${newStatus}`);
+
+          console.log(`📊 Order ${orderNumber} Progress: ${completedItems}/${totalItems} items (${completionPercentage}%) - Status: ${newStatus}`);
 
           if (previousStatus !== newStatus) {
             if (newStatus === 'Completed' && orderType === 'pending') {
@@ -305,7 +385,6 @@ const DispatcherOrders = ({ orderType }) => {
     setFilteredOrders(filteredByType);
   }, [orders, orderType, searchTerm]);
 
-
   const handleOrderDeleted = useCallback((deleteData) => {
     try {
       const { orderId, orderNumber } = deleteData;
@@ -319,17 +398,15 @@ const DispatcherOrders = ({ orderType }) => {
       });
 
       deleteOrderFromLocalStorage(orderId, 'dispatcher');
-
       toast.success(`Order #${orderNumber} has been deleted successfully`);
 
     } catch (error) {
-
+      console.error('Error handling order deletion:', error);
     }
   }, [orderType]);
 
   useEffect(() => {
     if (!socket || !isConnected) return;
-
     socket.on('new-order', handleNewOrder);
     socket.on('order-updated', handleOrderUpdated);
     socket.on('team-progress-updated', handleProgressUpdate);
@@ -423,7 +500,6 @@ const DispatcherOrders = ({ orderType }) => {
           console.warn('Failed to send delete notification via socket');
         }
 
-
         const updatedOrders = orders.filter(order => order._id !== orderId);
         setOrders(updatedOrders);
         setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
@@ -503,7 +579,6 @@ const DispatcherOrders = ({ orderType }) => {
     setOrders(updatedOrders);
     setFilteredOrders(updatedOrders);
   };
-
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

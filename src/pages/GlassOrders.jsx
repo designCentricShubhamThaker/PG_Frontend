@@ -73,10 +73,7 @@ const GlassOrders = ({ orderType }) => {
     };
 
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Glass team received new order:', orderData);
-
         if (!orderData.orderData) return;
-
         const newOrder = orderData.orderData;
 
         if (!hasGlassAssignments(newOrder)) {
@@ -94,30 +91,21 @@ const GlassOrders = ({ orderType }) => {
 
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
             let updatedOrders;
             if (existingOrderIndex >= 0) {
-
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = newOrder;
-                console.log('Updated existing order:', newOrder.order_number);
-
             } else {
-
                 updatedOrders = [newOrder, ...prevOrders];
                 console.log('Added new order:', newOrder.order_number);
             }
             saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
-
             return updatedOrders;
         });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Glass team received order update:', updateData);
-
         if (!updateData.orderData) return;
-
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
@@ -173,38 +161,24 @@ const GlassOrders = ({ orderType }) => {
             return updatedOrders;
         });
 
-        if (updateData.editedFields && updateData.editedFields.length > 0) {
-            console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
-            // You could show a toast notification here if you have a notification system
-            toast.success("order progress updated !")
-        }
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Glass team received order delete notification:', deleteData);
         try {
             const { orderId, orderNumber } = deleteData;
             if (!orderId) {
                 console.warn('No order ID in delete notification');
                 return;
             }
-
             setOrders(prevOrders => {
                 const updatedOrders = prevOrders.filter(order => order._id !== orderId);
                 saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
                 return updatedOrders;
             });
-
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-
-            // Remove from localStorage
             deleteOrderFromLocalStorage(orderId);
-
-            toast.success(`Order #${orderNumber} has been deleted`);
-            console.log(`✅ Order #${orderNumber} removed from glass team view`);
-
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
@@ -501,13 +475,6 @@ const GlassOrders = ({ orderType }) => {
                     <h2 className="text-sm font-semibold text-orange-700">
                         Bottle Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
                     </h2>
-                    {/* Socket connection indicator */}
-                    {/* <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                        <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                            {isConnected ? 'Live' : 'Offline'}
-                        </span>
-                    </div> */}
                 </div>
 
                 <div className="relative">
