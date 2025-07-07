@@ -21,11 +21,18 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
     useEffect(() => {
         if (isOpen && itemData?.team_assignments?.printing) {
-            setAssignments(itemData.team_assignments.printing.map(assignment => ({
-                ...assignment,
-                todayQty: 0,
-                notes: ''
-            })));
+            const processedAssignments = itemData.team_assignments.printing.map(assignment => {
+                console.log('Processing assignment:', assignment._id);
+                return {
+                    ...assignment,
+                    _id: assignment._id,
+                    todayQty: 0,
+                    notes: ''
+                };
+            });
+
+            console.log('Processed assignments:', processedAssignments.map(a => a._id));
+            setAssignments(processedAssignments);
             setError(null);
             setSuccessMessage('');
         }
@@ -72,7 +79,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
             const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
-            const existingOrders = getOrdersFromLocalStorage(orderType,TEAMS.PRINTING);
+            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.PRINTING);
             const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (orderIndex !== -1) {
@@ -81,7 +88,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 existingOrders.push(updatedOrder);
             }
 
-            saveOrdersToLocalStorage(existingOrders, orderType,TEAMS.PRINTING);
+            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.PRINTING);
 
             console.log('LocalStorage updated successfully');
         } catch (error) {
@@ -108,7 +115,8 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                     };
 
                     return {
-                        assignmentId: assignment._id,
+                        // ✅ Use the actual assignment ID from the database
+                        assignmentId: assignment._id, // Don't append '_printing'
                         newEntry,
                         newTotalCompleted: newCompleted,
                         newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress'
@@ -121,32 +129,30 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 return;
             }
 
+            // Validation remains the same
             for (let i = 0; i < updates.length; i++) {
                 const assignment = assignments[i];
                 const remaining = getRemainingQty(assignment);
 
                 if (assignment.todayQty > remaining) {
-                    setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
+                    setError(`Quantity for ${assignment.glass_name || assignment.printing_name} exceeds remaining amount (${remaining})`);
                     setLoading(false);
                     return;
                 }
             }
 
-            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/glass', {
-            //     orderNumber: orderData.order_number,
-            //     itemId: itemData._id,
-            //     updates
-            // });
+            console.log('Sending updates:', updates); // Debug log
+
             const response = await axios.patch('http://localhost:5000/api/print', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates
             });
 
+            // Rest of your handleSave logic remains the same...
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
-               
 
                 if (notifyProgressUpdate) {
                     notifyProgressUpdate({

@@ -8,8 +8,8 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
+import DecoFoilOrders from '../pages/DecoFoilOrders.jsx';
 
-import TeamOrders from '../pages/TeamOrders.jsx';
 
 const DecoFoilDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -149,9 +149,9 @@ const DecoFoilDashbaord = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <TeamOrders orderType="pending" />
+             <DecoFoilOrders orderType="pending" />
             ) : (
-             <TeamOrders orderType="completed"/>
+             <DecoFoilOrders orderType="completed"/>
             )}
           </div>
         </main>

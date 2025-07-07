@@ -14,7 +14,7 @@ import {
 import { useSocket } from '../context/SocketContext.jsx';
 import UpdatePrintQty from '../updateQuanityComponents/updatePrintQty.jsx';
 
-const DecoPrintOrders = ({ orderType }) => {
+const DecoFoilOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -41,9 +41,9 @@ const DecoPrintOrders = ({ orderType }) => {
     };
 
     const isItemCompleted = (item) => {
-        const printingAssignments = item.team_assignments?.printing || [];
-        if (printingAssignments.length === 0) return false;
-        return printingAssignments.every(assignment => getRemainingQty(assignment) === 0);
+        const foilingAssignments = item.team_assignments?.foiling || [];
+        if (foilingAssignments.length === 0) return false;
+        return foilingAssignments.every(assignment => getRemainingQty(assignment) === 0);
     };
 
     const isOrderCompleted = (order) => {
@@ -59,13 +59,13 @@ const DecoPrintOrders = ({ orderType }) => {
         if (updatedOrder.order_status !== newStatus) {
             updatedOrder.order_status = newStatus;
         }
-        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PRINTING);
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.FOILING);
         return updatedOrder;
     };
 
-    const hasPrintingAssignments = (order) => {
+    const hasFoilingAssignments = (order) => {
         return order.item_ids?.some(item =>
-            item.team_assignments?.printing && item.team_assignments.printing.length > 0
+            item.team_assignments?.foiling && item.team_assignments.foiling.length > 0
         );
     };
 
@@ -134,7 +134,7 @@ const DecoPrintOrders = ({ orderType }) => {
     }
 
     const handleDecorationOrderReady = useCallback((decorationData) => {
-        console.log('🎨 Printing team received decoration order:', decorationData);
+        console.log('🎨 Foiling team received decoration order:', decorationData);
 
         if (!decorationData.orderData) {
             console.warn('No order data in decoration notification');
@@ -149,9 +149,9 @@ const DecoPrintOrders = ({ orderType }) => {
             isCompleteItemBatch
         } = decorationData;
 
-        // Check if this is for printing team
-        if (!hasPrintingAssignments(orderData)) {
-            console.log('Decoration order has no printing assignments, ignoring');
+        // Check if this is for foiling team
+        if (!hasFoilingAssignments(orderData)) {
+            console.log('Decoration order has no foiling assignments, ignoring');
             return;
         }
 
@@ -176,7 +176,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 updatedOrders[existingOrderIndex] = mergedOrder;
 
                 console.log('📝 Updated existing order with new decoration assignments:', mergedOrder.order_number);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
                 return updatedOrders;
             } else {
                 // Add new order only if it matches current view
@@ -202,28 +202,27 @@ const DecoPrintOrders = ({ orderType }) => {
 
                 const updatedOrders = [enrichedOrder, ...prevOrders];
                 console.log('➕ Added new decoration order:', enrichedOrder.order_number);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
                 return updatedOrders;
             }
         });
 
         // Show appropriate toast notification
         const toastMessage = isCompleteItemBatch
-            ? `🎨 Order #${orderData.order_number} - Complete items ready for printing! (${decorationType})`
-            : `🎨 Order #${orderData.order_number} - Additional items ready for printing! (${decorationType})`;
+            ? `🎨 Order #${orderData.order_number} - Complete items ready for foiling! (${decorationType})`
+            : `🎨 Order #${orderData.order_number} - Additional items ready for foiling! (${decorationType})`;
 
         toast.success(toastMessage, { duration: 5000 });
     }, [orderType]);
 
-
     // Original new order handler (for immediate orders)
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Printing team received new order:', orderData);
+        console.log('📦 Foiling team received new order:', orderData);
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
 
-        if (!hasPrintingAssignments(newOrder)) {
-            console.log('Order has no printing assignments, ignoring');
+        if (!hasFoilingAssignments(newOrder)) {
+            console.log('Order has no foiling assignments, ignoring');
             return;
         }
 
@@ -246,13 +245,13 @@ const DecoPrintOrders = ({ orderType }) => {
                 updatedOrders = [newOrder, ...prevOrders];
                 console.log('Added new order:', newOrder.order_number);
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
             return updatedOrders;
         });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Printing team received order update:', updateData);
+        console.log('✏️ Foiling team received order update:', updateData);
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
@@ -261,20 +260,20 @@ const DecoPrintOrders = ({ orderType }) => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from printing team:', updatedOrder.order_number);
+                console.log('Order removed from foiling team:', updatedOrder.order_number);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.FOILING);
                     return filteredOrders;
                 }
                 return prevOrders;
             }
 
-            if (!hasPrintingAssignments(updatedOrder)) {
-                console.log('Updated order has no printing assignments, removing if exists');
+            if (!hasFoilingAssignments(updatedOrder)) {
+                console.log('Updated order has no foiling assignments, removing if exists');
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.FOILING);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -287,7 +286,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.FOILING);
                     return filteredOrders;
                 }
                 return prevOrders;
@@ -302,13 +301,13 @@ const DecoPrintOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
             return updatedOrders;
         });
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Printing team received order delete notification:', deleteData);
+        console.log('🗑️ Foiling team received order delete notification:', deleteData);
         try {
             const { orderId, orderNumber } = deleteData;
             if (!orderId) {
@@ -318,7 +317,7 @@ const DecoPrintOrders = ({ orderType }) => {
 
             setOrders(prevOrders => {
                 const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
                 return updatedOrders;
             });
 
@@ -338,12 +337,12 @@ const DecoPrintOrders = ({ orderType }) => {
         if (!socket) return;
 
         const handleNewOrder = (orderData) => {
-            console.log('📦 Printing team received new order:', orderData);
+            console.log('📦 Foiling team received new order:', orderData);
             if (!orderData.orderData) return;
             const newOrder = orderData.orderData;
 
-            if (!hasPrintingAssignments(newOrder)) {
-                console.log('Order has no printing assignments, ignoring');
+            if (!hasFoilingAssignments(newOrder)) {
+                console.log('Order has no foiling assignments, ignoring');
                 return;
             }
 
@@ -369,7 +368,7 @@ const DecoPrintOrders = ({ orderType }) => {
                     console.log('➕ Added new initial order:', newOrder.order_number);
                 }
 
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
                 return updatedOrders;
             });
 
@@ -389,32 +388,33 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     }, [socket, handleOrderUpdate, handleOrderDeleted, handleDecorationOrderReady, orderType]);
 
-    const fetchPrintOrders = async (type = orderType) => {
+    const fetchFoilOrders = async (type = orderType) => {
         try {
             setLoading(true);
-            if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
-                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.FOILING)) {
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
                 setOrders(cachedOrders);
                 setFilteredOrders(cachedOrders);
                 setLoading(false);
                 return;
             }
 
-            const response = await axios.get(`http://localhost:5000/api/print?orderType=${type}`);
+            const response = await axios.get(`http://localhost:5000/api/foil?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
+            console.log(fetchedOrders);
 
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.PRINTING);
+            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.FOILING);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
             setLoading(false);
         } catch (err) {
-            setError('Failed to fetch printing orders: ' + (err.response?.data?.message || err.message));
+            setError('Failed to fetch foiling orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchPrintOrders(orderType);
+        fetchFoilOrders(orderType);
     }, [orderType]);
 
     useEffect(() => {
@@ -431,12 +431,12 @@ const DecoPrintOrders = ({ orderType }) => {
                     if (item.name?.toLowerCase().includes(searchTerm.toLowerCase())) {
                         return true;
                     }
-                    return item.team_assignments?.printing?.some(printing => {
-                        return printing.printing_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            printing.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            printing.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            printing.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            printing.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
+                    return item.team_assignments?.foiling?.some(foiling => {
+                        return foiling.foiling_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            foiling.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            foiling.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            foiling.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            foiling.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
                     });
                 });
             });
@@ -492,8 +492,7 @@ const DecoPrintOrders = ({ orderType }) => {
     const handleOrdersPerPageChange = (e) => {
         setOrdersPerPage(Number(e.target.value));
         setCurrentPage(1);
-    };
-
+    }
 
     const renderOrderTable = () => {
         if (currentOrders.length === 0) {
@@ -502,7 +501,7 @@ const DecoPrintOrders = ({ orderType }) => {
                     <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
                         <Package className="w-8 h-8 text-orange-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No printing orders found</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No foiling orders found</h3>
                     <p className="text-sm text-gray-500 text-center max-w-sm">
                         When you receive new orders, they will appear here for easy management and tracking.
                     </p>
@@ -537,7 +536,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 {currentOrders.map((order, orderIndex) => {
                     let totalOrderRows = 0;
                     order.item_ids?.forEach(item => {
-                        const pritningAssignments = item.team_assignments?.printing || [];
+                        const pritningAssignments = item.team_assignments?.foiling || [];
                         totalOrderRows += Math.max(1, pritningAssignments.length);
                     });
 
@@ -546,7 +545,7 @@ const DecoPrintOrders = ({ orderType }) => {
                     return (
                         <div key={`order-${order._id}`} className="bg-white rounded-lg shadow-sm border border-orange-200 mb-3 overflow-hidden">
                             {order.item_ids?.map((item, itemIndex) => {
-                                const pritningAssignments = item.team_assignments?.printing || [];
+                                const pritningAssignments = item.team_assignments?.foiling || [];
                                 const assignments = pritningAssignments.length === 0 ? [null] : pritningAssignments;
                                 const bgColor = colorClasses[itemIndex % colorClasses.length];
 
@@ -658,7 +657,7 @@ const DecoPrintOrders = ({ orderType }) => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-orange-700">
-                        Printing Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                        Foiling Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
                     </h2>
                 </div>
                 <div className="relative">
@@ -775,6 +774,6 @@ const DecoPrintOrders = ({ orderType }) => {
     );
 };
 
-export default DecoPrintOrders;
+export default DecoFoilOrders;
 
 

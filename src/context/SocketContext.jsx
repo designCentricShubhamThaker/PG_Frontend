@@ -15,15 +15,6 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (!user || !user.role) return;
 
-        // const socketInstance = io('https://pg-backend-o05l.onrender.com', {
-        //     withCredentials: true,
-        //     transports: ['websocket', 'polling'],
-        //     query: {
-        //         userId: user.id || 'anonymous',
-        //         role: user.role,
-        //         team: user.team || 'unknown',
-        //     }
-        // });
         const socketInstance = io('http://localhost:5000', {
             withCredentials: true,
             transports: ['websocket', 'polling'],
@@ -64,6 +55,12 @@ export const SocketProvider = ({ children }) => {
             console.log('📈 Progress update received in SocketProvider:', progressData);
         });
 
+        // NEW: Sequential decoration event listener
+        socketInstance.on('decoration-order-ready', (decorationData) => {
+            console.log('🎨 Decoration order ready received:', decorationData);
+            // This will be handled by individual team components
+        });
+
         setSocket(socketInstance);
 
         return () => {
@@ -94,16 +91,16 @@ export const SocketProvider = ({ children }) => {
         try {
             const assignedTeams = [];
             orderData.item_ids?.forEach(item => {
-
                 if (item.team_assignments) {
                     Object.keys(item.team_assignments).forEach(team => {
-                
                         if (item.team_assignments[team].length > 0 && !assignedTeams.includes(team)) {
-                            assignedTeams.push(team);  console.log(`✅ Added team: ${team}`);
+                            assignedTeams.push(team);
+                            console.log(`✅ Added team: ${team}`);
                         }
                     });
                 }
             });
+
             const notificationData = {
                 order: orderData,
                 assignedTeams,
@@ -193,18 +190,17 @@ export const SocketProvider = ({ children }) => {
             console.log('📤 Sending progress update:', progressData);
 
             const notificationData = {
-  orderNumber: progressData.orderNumber,
-  itemName: progressData.itemName,
-  team: progressData.team,
-  updates: progressData.updates,
-  updatedOrder: progressData.updatedOrder,
-  timestamp: new Date().toISOString(),
-  customerName: progressData.customerName,
-  dispatcherName: progressData.dispatcherName,
-  completedItemId: progressData.completedItemId,
-  isFullyCompleted: progressData.isFullyCompleted
-};
-
+                orderNumber: progressData.orderNumber,
+                itemName: progressData.itemName,
+                team: progressData.team,
+                updates: progressData.updates,
+                updatedOrder: progressData.updatedOrder,
+                timestamp: new Date().toISOString(),
+                customerName: progressData.customerName,
+                dispatcherName: progressData.dispatcherName,
+                completedItemId: progressData.completedItemId,
+                isFullyCompleted: progressData.isFullyCompleted
+            };
 
             console.log('📊 Progress notification data:', {
                 orderNumber: notificationData.orderNumber,
@@ -225,7 +221,6 @@ export const SocketProvider = ({ children }) => {
             return false;
         }
     }, [socket]);
-
 
     const notifyOrderDelete = useCallback((deleteData) => {
         if (!socket || !socket.connected || !deleteData) {

@@ -426,7 +426,7 @@ const DispatcherOrders = ({ orderType }) => {
 
   const handleCreateOrder = async () => {
     await fetchOrders(orderType);
-    toast.success("Order created successfully!");
+    
   };
 
   const handleDelete = async (orderId) => {
