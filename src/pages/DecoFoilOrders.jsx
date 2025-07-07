@@ -776,4 +776,3 @@ const DecoFoilOrders = ({ orderType }) => {
 
 export default DecoFoilOrders;
 
-

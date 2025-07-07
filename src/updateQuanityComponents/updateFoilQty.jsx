@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
-const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
+const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -19,23 +19,22 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const { user } = useAuth()
     const { notifyProgressUpdate } = useSocket()
 
-    // In your UpdatePrintQty component
-    useEffect(() => {
-        if (isOpen && itemData?.team_assignments?.printing) {
-            const processedAssignments = itemData.team_assignments.printing.map(assignment => {
-                console.log('Processing assignment:', assignment._id, 'isNew:', assignment.isNewAssignment);
-                return {
-                    ...assignment,
-                    _id: assignment._id,
-                    todayQty: 0,
-                    notes: '',
-                    isNewAssignment: assignment.isNewAssignment || false
-                };
-            });
-
-            setAssignments(processedAssignments);
-        }
-    }, [isOpen, itemData]);;
+   useEffect(() => {
+          if (isOpen && itemData?.team_assignments?.foiling) {
+              const processedAssignments = itemData.team_assignments.foiling.map(assignment => {
+                  console.log('Processing assignment:', assignment._id, 'isNew:', assignment.isNewAssignment);
+                  return {
+                      ...assignment,
+                      _id: assignment._id,
+                      todayQty: 0,
+                      notes: '',
+                      isNewAssignment: assignment.isNewAssignment || false
+                  };
+              });
+  
+              setAssignments(processedAssignments);
+          }
+      }, [isOpen, itemData]);;
 
     const handleQuantityChange = (assignmentIndex, value) => {
         const newAssignments = [...assignments];
@@ -78,7 +77,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
             const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
-            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.PRINTING);
+            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.FOILING);
             const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (orderIndex !== -1) {
@@ -87,7 +86,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 existingOrders.push(updatedOrder);
             }
 
-            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.PRINTING);
+            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.FOILING);
 
             console.log('LocalStorage updated successfully');
         } catch (error) {
@@ -134,7 +133,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 const remaining = getRemainingQty(assignment);
 
                 if (assignment.todayQty > remaining) {
-                    setError(`Quantity for ${assignment.glass_name || assignment.printing_name} exceeds remaining amount (${remaining})`);
+                    setError(`Quantity for ${assignment.glass_name || assignment.foiling_name} exceeds remaining amount (${remaining})`);
                     setLoading(false);
                     return;
                 }
@@ -142,7 +141,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
             console.log('Sending updates:', updates); // Debug log
 
-            const response = await axios.patch('http://localhost:5000/api/print', {
+            const response = await axios.patch('http://localhost:5000/api/foil', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates
@@ -401,4 +400,4 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     );
 };
 
-export default UpdatePrintQty;
+export default UpdateFoilQty;

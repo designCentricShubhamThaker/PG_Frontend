@@ -66,7 +66,7 @@ const hasOrdersInLocalStorage = (orderType, team) => {
   return !!localStorage.getItem(storageKey);
 };
 
-const updateDispatcherOrderInLocalStorage = (updatedOrder, team = TEAMS.DISPATCHER) => {
+const updateDispatcherOrderInLocalStorage = (updatedOrder, team ) => {
   try {
     if (!updatedOrder || typeof updatedOrder !== 'object' || !updatedOrder._id) {
       console.error('Invalid order data for dispatcher-like team update');

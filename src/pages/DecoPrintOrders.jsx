@@ -777,4 +777,3 @@ const DecoPrintOrders = ({ orderType }) => {
 
 export default DecoPrintOrders;
 
-
