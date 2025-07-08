@@ -19,22 +19,22 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const { user } = useAuth()
     const { notifyProgressUpdate } = useSocket()
 
-   useEffect(() => {
-          if (isOpen && itemData?.team_assignments?.foiling) {
-              const processedAssignments = itemData.team_assignments.foiling.map(assignment => {
-                  console.log('Processing assignment:', assignment._id, 'isNew:', assignment.isNewAssignment);
-                  return {
-                      ...assignment,
-                      _id: assignment._id,
-                      todayQty: 0,
-                      notes: '',
-                      isNewAssignment: assignment.isNewAssignment || false
-                  };
-              });
-  
-              setAssignments(processedAssignments);
-          }
-      }, [isOpen, itemData]);;
+    useEffect(() => {
+        if (isOpen && itemData?.team_assignments?.foiling) {
+            const processedAssignments = itemData.team_assignments.foiling.map(assignment => {
+                console.log('Processing assignment:', assignment._id, 'isNew:', assignment.isNewAssignment ?? false);
+                return {
+                    ...assignment,
+                    todayQty: 0,
+                    notes: '',
+                    isNewAssignment: assignment.isNewAssignment ?? false // 🔒 prevent undefined
+                };
+            });
+
+            setAssignments(processedAssignments);
+        }
+    }, [isOpen, itemData]);
+
 
     const handleQuantityChange = (assignmentIndex, value) => {
         const newAssignments = [...assignments];
@@ -76,24 +76,46 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
     const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
-            const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
-            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.FOILING);
-            const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
+            // 🔥 FIX: Determine order type based on completion status
+            const isCompleted = updatedOrder.item_ids?.every(item => {
+                const printingAssignments = item.team_assignments?.foiling || [];
+                if (printingAssignments.length === 0) return false;
+                return printingAssignments.every(assignment => {
+                    const completed = assignment.team_tracking?.total_completed_qty || 0;
+                    const total = assignment.quantity || 0;
+                    return completed >= total;
+                });
+            });
 
-            if (orderIndex !== -1) {
-                existingOrders[orderIndex] = updatedOrder;
-            } else {
-                existingOrders.push(updatedOrder);
-            }
+            const orderType = isCompleted ? 'completed' : 'pending';
 
-            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.FOILING);
+            // 🔥 FIX: Update both order types to handle status changes
+            ['pending', 'completed'].forEach(type => {
+                const existingOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
+                const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
-            console.log('LocalStorage updated successfully');
+                if (type === orderType) {
+                    // Add/update in correct type
+                    if (orderIndex !== -1) {
+                        existingOrders[orderIndex] = updatedOrder;
+                    } else {
+                        existingOrders.unshift(updatedOrder);
+                    }
+                    saveTeamOrdersToLocalStorage(existingOrders, type, TEAMS.FOILING);
+                } else {
+                    // Remove from incorrect type
+                    if (orderIndex !== -1) {
+                        existingOrders.splice(orderIndex, 1);
+                        saveTeamOrdersToLocalStorage(existingOrders, type, TEAMS.FOILING);
+                    }
+                }
+            });
+
+            console.log('LocalStorage updated successfully for order type:', orderType);
         } catch (error) {
             console.error('Error updating localStorage:', error);
         }
     };
-
     const handleSave = async () => {
         try {
             setLoading(true);
@@ -109,12 +131,12 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         date: new Date().toISOString(),
                         quantity: assignment.todayQty,
                         notes: assignment.notes || '',
-                        operator: 'Current User'
+                        operator: user?.name || 'Current User' // 🔥 FIX: Use actual user name
                     };
 
                     return {
                         // ✅ Use the actual assignment ID from the database
-                        assignmentId: assignment._id, // Don't append '_printing'
+                        assignmentId: assignment._id, // This is the correct ID
                         newEntry,
                         newTotalCompleted: newCompleted,
                         newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress'
@@ -127,27 +149,27 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 return;
             }
 
-            // Validation remains the same
-            for (let i = 0; i < updates.length; i++) {
+            // Validation
+            for (let i = 0; i < assignments.length; i++) {
                 const assignment = assignments[i];
-                const remaining = getRemainingQty(assignment);
-
-                if (assignment.todayQty > remaining) {
-                    setError(`Quantity for ${assignment.glass_name || assignment.foiling_name} exceeds remaining amount (${remaining})`);
-                    setLoading(false);
-                    return;
+                if (assignment.todayQty > 0) {
+                    const remaining = getRemainingQty(assignment);
+                    if (assignment.todayQty > remaining) {
+                        setError(`Quantity for ${assignment.glass_name || assignment.foiling_name} exceeds remaining amount (${remaining})`);
+                        setLoading(false);
+                        return;
+                    }
                 }
             }
 
-            console.log('Sending updates:', updates); // Debug log
+            console.log('Sending updates with assignment IDs:', updates.map(u => u.assignmentId));
 
-            const response = await axios.patch('http://localhost:5000/api/foil', {
+            const response = await axios.patch('http://localhost:5000/api/print', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates
             });
 
-            // Rest of your handleSave logic remains the same...
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
@@ -168,7 +190,7 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         customerName: orderData.customer_name,
                         dispatcherName: orderData.dispatcher_name
                     });
-                    console.log('notif sennnntt')
+                    console.log('Progress notification sent');
                 }
 
                 setSuccessMessage('Quantities updated successfully!');
@@ -182,16 +204,7 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             }
         } catch (err) {
             console.error('Error updating quantities:', err);
-
-            let errorMessage = 'Failed to update quantities';
-
-            if (err.response?.data?.message) {
-                errorMessage = err.response.data.message;
-            } else if (err.message) {
-                errorMessage = err.message;
-            }
-
-            setError(errorMessage);
+            setError(err.response?.data?.message || err.message || 'Failed to update quantities');
         } finally {
             setLoading(false);
         }

@@ -1,3 +1,4 @@
+
 import { Search, Package } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
@@ -27,6 +28,7 @@ const DecoPrintOrders = ({ orderType }) => {
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
 
+    // Utility functions for status calculation
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
         const total = assignment.quantity || 0;
@@ -52,106 +54,154 @@ const DecoPrintOrders = ({ orderType }) => {
         return items.every(item => isItemCompleted(item));
     };
 
-    const updateOrderStatus = (updatedOrder) => {
-        const isCompleted = isOrderCompleted(updatedOrder);
-        const newStatus = isCompleted ? 'Completed' : 'Pending';
+    // 🔥 FIXED: Enhanced merge logic with better item preservation
+    const mergeOrUpdateOrder = (existingOrder, newOrderData) => {
+        console.log('🔄 Merging order from backend:', {
+            orderId: existingOrder._id,
+            existingItems: existingOrder.item_ids?.length || 0,
+            newItems: newOrderData.item_ids?.length || 0
+        });
 
-        if (updatedOrder.order_status !== newStatus) {
-            updatedOrder.order_status = newStatus;
-        }
-        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PRINTING);
-        return updatedOrder;
-    };
+        const mergedOrder = {
+            ...existingOrder,
+            ...newOrderData,
+            item_ids: []
+        };
 
-    const hasPrintingAssignments = (order) => {
-        return order.item_ids?.some(item =>
-            item.team_assignments?.printing && item.team_assignments.printing.length > 0
-        );
-    };
+        // Create a map of existing items for quick lookup
+        const existingItemsMap = new Map();
+        (existingOrder.item_ids || []).forEach(item => {
+            existingItemsMap.set(item._id.toString(), item);
+        });
 
-    function mergeOrderAssignments(existingOrder, newOrder, decorationType) {
-        const mergedOrder = { ...existingOrder };
+        // 🔥 FIX: Track all items that should be in the final order
+        const finalItemsMap = new Map();
 
-        // Merge item assignments
-        if (newOrder.item_ids && newOrder.item_ids.length > 0) {
-            mergedOrder.item_ids = existingOrder.item_ids.map(existingItem => {
-                const newItem = newOrder.item_ids.find(item => item._id === existingItem._id);
+        // Process new items first
+        (newOrderData.item_ids || []).forEach(newItem => {
+            const existingItem = existingItemsMap.get(newItem._id.toString());
 
-                if (newItem && newItem.team_assignments) {
-                    const mergedItem = { ...existingItem };
+            if (existingItem) {
+                // Merge existing item with new data
+                const mergedItem = {
+                    ...existingItem,
+                    ...newItem,
+                    team_assignments: {
+                        ...existingItem.team_assignments,
+                        ...newItem.team_assignments
+                    }
+                };
 
-                    // Merge team assignments for each team
-                    Object.keys(newItem.team_assignments).forEach(teamName => {
-                        const newAssignments = newItem.team_assignments[teamName] || [];
-                        const existingAssignments = existingItem.team_assignments?.[teamName] || [];
+                // Specifically handle printing assignments
+                if (newItem.team_assignments?.printing?.length > 0) {
+                    const existingPrintingAssignments = existingItem.team_assignments?.printing || [];
+                    const newPrintingAssignments = newItem.team_assignments.printing;
 
-                        // Merge assignments, avoiding duplicates
-                        const mergedAssignments = [...existingAssignments];
+                    const mergedPrintingAssignments = new Map();
 
-                        newAssignments.forEach(newAssignment => {
-                            const existingAssignmentIndex = mergedAssignments.findIndex(
-                                existing => existing.glass_item_id === newAssignment.glass_item_id
-                            );
-
-                            if (existingAssignmentIndex >= 0) {
-                                // Update existing assignment
-                                mergedAssignments[existingAssignmentIndex] = {
-                                    ...mergedAssignments[existingAssignmentIndex],
-                                    ...newAssignment
-                                };
-                                console.log(`🔄 Updated existing assignment for ${newAssignment.glass_name}`);
-                            } else {
-                                // Add new assignment
-                                mergedAssignments.push(newAssignment);
-                                console.log(`➕ Added new assignment for ${newAssignment.glass_name}`);
+                    // Add existing assignments with their tracking data
+                    existingPrintingAssignments.forEach(existing => {
+                        const key = existing._id || existing.glass_item_id;
+                        mergedPrintingAssignments.set(key.toString(), {
+                            ...existing,
+                            // Preserve tracking data
+                            team_tracking: existing.team_tracking || {
+                                total_completed_qty: 0,
+                                completed_entries: []
                             }
                         });
-
-                        // Update team assignments
-                        if (!mergedItem.team_assignments) {
-                            mergedItem.team_assignments = {};
-                        }
-                        mergedItem.team_assignments[teamName] = mergedAssignments;
                     });
 
-                    return mergedItem;
+                    // Merge new assignments, preserving tracking data
+                    newPrintingAssignments.forEach(newAssignment => {
+                        const key = newAssignment._id || newAssignment.glass_item_id;
+                        const existing = mergedPrintingAssignments.get(key.toString());
+
+                        mergedPrintingAssignments.set(key.toString(), {
+                            ...newAssignment,
+                            // Preserve existing tracking data if it exists
+                            team_tracking: existing?.team_tracking || newAssignment.team_tracking || {
+                                total_completed_qty: 0,
+                                completed_entries: []
+                            },
+                            // Mark new assignments appropriately
+                            isNewAssignment: existing ? false : (newAssignment.isNewAssignment ?? true)
+                        });
+                    });
+
+                    mergedItem.team_assignments.printing = Array.from(mergedPrintingAssignments.values());
                 }
 
-                return existingItem;
-            });
+                finalItemsMap.set(newItem._id.toString(), mergedItem);
+            } else {
+                // New item - add with proper assignment marking
+                const newItemWithMarkedAssignments = {
+                    ...newItem,
+                    team_assignments: {
+                        ...newItem.team_assignments,
+                        printing: (newItem.team_assignments?.printing || []).map(assignment => ({
+                            ...assignment,
+                            isNewAssignment: assignment.isNewAssignment ?? true,
+                            team_tracking: assignment.team_tracking || {
+                                total_completed_qty: 0,
+                                completed_entries: []
+                            }
+                        }))
+                    }
+                };
+                finalItemsMap.set(newItem._id.toString(), newItemWithMarkedAssignments);
+            }
+        });
 
-            // Add any completely new items that don't exist in existing order
-            newOrder.item_ids.forEach(newItem => {
-                const existsInExisting = existingOrder.item_ids.some(existing => existing._id === newItem._id);
-                if (!existsInExisting) {
-                    mergedOrder.item_ids.push(newItem);
-                    console.log(`➕ Added completely new item: ${newItem.name}`);
-                }
-            });
-        }
+        // 🔥 FIX: Add remaining existing items that have printing assignments
+        existingItemsMap.forEach((remainingItem, itemId) => {
+            if (!finalItemsMap.has(itemId) && remainingItem.team_assignments?.printing?.length > 0) {
+                finalItemsMap.set(itemId, remainingItem);
+            }
+        });
+
+        // Convert map to array
+        mergedOrder.item_ids = Array.from(finalItemsMap.values());
+
+        console.log('✅ Order merged successfully:', {
+            orderId: mergedOrder._id,
+            finalItems: mergedOrder.item_ids?.length || 0,
+            printingAssignments: mergedOrder.item_ids?.reduce((sum, item) =>
+                sum + (item.team_assignments?.printing?.length || 0), 0)
+        });
 
         return mergedOrder;
-    }
+    };
 
+    // 🔥 FIXED: Better decoration order handling
     const handleDecorationOrderReady = useCallback((decorationData) => {
-        console.log('🎨 Printing team received decoration order:', decorationData);
+        console.log('🎨 Received decoration order from backend:', decorationData);
 
         if (!decorationData.orderData) {
             console.warn('No order data in decoration notification');
             return;
         }
 
-        const {
-            orderData,
-            decorationType,
-            sequencePosition,
-            totalSequenceSteps,
-            isCompleteItemBatch
-        } = decorationData;
+        let { orderData, decorationType, sequencePosition, totalSequenceSteps } = decorationData;
 
-        // Check if this is for printing team
-        if (!hasPrintingAssignments(orderData)) {
-            console.log('Decoration order has no printing assignments, ignoring');
+        // 🔥 FIX: Filter only items with ready_for_decoration assignments
+        if (orderData.item_ids?.length > 0) {
+            orderData.item_ids = orderData.item_ids.filter(item => {
+                const printingAssignments = item.team_assignments?.printing || [];
+                const hasReadyAssignments = printingAssignments.some(assign => assign.ready_for_decoration);
+                console.log(`📋 Item ${item.name} has ready assignments:`, hasReadyAssignments);
+                return hasReadyAssignments;
+            });
+        }
+
+        if (orderData.item_ids?.length === 0) {
+            console.log('⛔ No items with ready_for_decoration = true, skipping order');
+            return;
+        }
+
+        // Check if order matches current view
+        if (!orderMatchesCurrentView(orderData)) {
+            console.log('Order does not match current view type');
             return;
         }
 
@@ -159,222 +209,175 @@ const DecoPrintOrders = ({ orderType }) => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === orderData._id);
 
             if (existingOrderIndex >= 0) {
-                // UPDATE existing order by merging assignments, not replacing
+                // Update existing order
                 const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrderAssignments(existingOrder, orderData, decorationType);
+                const mergedOrder = mergeOrUpdateOrder(existingOrder, orderData);
 
-                // Add sequence info
+                // Update decoration sequence info
                 mergedOrder.decorationSequence = {
+                    ...mergedOrder.decorationSequence,
                     type: decorationType,
                     position: sequencePosition,
                     totalSteps: totalSequenceSteps,
-                    readyForDecoration: true,
-                    isCompleteItemBatch
+                    readyForDecoration: true
                 };
 
                 const updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
 
-                console.log('📝 Updated existing order with new decoration assignments:', mergedOrder.order_number);
+                console.log('💾 Saving updated orders to localStorage:', updatedOrders.length);
                 saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
                 return updatedOrders;
             } else {
-                // Add new order only if it matches current view
-                const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
-                const currentViewType = orderType.toLowerCase();
-
-                if (orderStatus !== currentViewType) {
-                    console.log(`New decoration order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-                    return prevOrders;
-                }
-
-                // Add sequence info to new order
-                const enrichedOrder = {
+                // Add new order
+                const newOrder = {
                     ...orderData,
                     decorationSequence: {
                         type: decorationType,
                         position: sequencePosition,
                         totalSteps: totalSequenceSteps,
-                        readyForDecoration: true,
-                        isCompleteItemBatch
+                        readyForDecoration: true
                     }
                 };
 
-                const updatedOrders = [enrichedOrder, ...prevOrders];
-                console.log('➕ Added new decoration order:', enrichedOrder.order_number);
+                const updatedOrders = [newOrder, ...prevOrders];
+                console.log('💾 Saving new orders to localStorage:', updatedOrders.length);
                 saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
                 return updatedOrders;
             }
         });
 
-        // Show appropriate toast notification
-        const toastMessage = isCompleteItemBatch
-            ? `🎨 Order #${orderData.order_number} - Complete items ready for printing! (${decorationType})`
-            : `🎨 Order #${orderData.order_number} - Additional items ready for printing! (${decorationType})`;
-
-        toast.success(toastMessage, { duration: 5000 });
+        toast.success(`🎨 Order #${orderData.order_number} ready for printing! (${decorationType})`, {
+            duration: 5000
+        });
     }, [orderType]);
 
-
-    // Original new order handler (for immediate orders)
+    // 🔥 FIXED: Better new order handling
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Printing team received new order:', orderData);
-        if (!orderData.orderData) return;
-        const newOrder = orderData.orderData;
+        console.log('📦 Received new order from backend:', orderData);
 
-        if (!hasPrintingAssignments(newOrder)) {
-            console.log('Order has no printing assignments, ignoring');
+        if (!orderData.orderData) return;
+        let newOrder = orderData.orderData;
+
+        // ✅ Filter only items that have printing assignments
+        const filteredItems = newOrder.item_ids?.filter(item => {
+            const hasPrintingAssignments = item.team_assignments?.printing?.length > 0;
+            console.log(`📋 Item ${item.name} has printing assignments:`, hasPrintingAssignments);
+            return hasPrintingAssignments;
+        });
+
+        if (!filteredItems || filteredItems.length === 0) {
+            console.log('New order has no printing assignments. Ignored.');
             return;
         }
+        newOrder = { ...newOrder, item_ids: filteredItems };
 
-        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
-        const currentViewType = orderType.toLowerCase();
-
-        if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+        if (!orderMatchesCurrentView(newOrder)) {
+            console.log('Filtered new order does not match current view type');
             return;
         }
 
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
 
-            let updatedOrders;
             if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = newOrder;
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrUpdateOrder(existingOrder, newOrder);
+
+                const updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                return updatedOrders;
             } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
+                const updatedOrders = [newOrder, ...prevOrders];
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                return updatedOrders;
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-            return updatedOrders;
         });
+
+        toast.success(`📦 New order #${newOrder.order_number} received!`, { duration: 4000 });
     }, [orderType]);
+
+    const orderMatchesCurrentView = (order) => {
+        const orderStatus = isOrderCompleted(order) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+        return orderStatus === currentViewType;
+    };
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Printing team received order update:', updateData);
+        console.log('✏️ Received order update from backend:', updateData);
+
         if (!updateData.orderData) return;
-        const updatedOrder = updateData.orderData;
-        const { hasAssignments, wasRemoved } = updateData;
+
+        const { orderData, hasAssignments, wasRemoved } = updateData;
 
         setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === orderData._id);
 
             if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from printing team:', updatedOrder.order_number);
+                // Remove order
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    const filteredOrders = prevOrders.filter(order => order._id !== orderData._id);
                     saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
                     return filteredOrders;
                 }
                 return prevOrders;
             }
 
-            if (!hasPrintingAssignments(updatedOrder)) {
-                console.log('Updated order has no printing assignments, removing if exists');
+            // Check if order matches current view
+            if (!orderMatchesCurrentView(orderData)) {
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    const filteredOrders = prevOrders.filter(order => order._id !== orderData._id);
                     saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
                     return filteredOrders;
                 }
                 return prevOrders;
             }
 
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
-            if (orderStatus !== currentViewType) {
-                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            let updatedOrders;
             if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = updatedOrder;
-                console.log('Updated existing order:', updatedOrder.order_number);
+                // Update existing order
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrUpdateOrder(existingOrder, orderData);
+
+                const updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                return updatedOrders;
             } else {
-                updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('Added updated order to current view:', updatedOrder.order_number);
+                // Add new order
+                const updatedOrders = [orderData, ...prevOrders];
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+                return updatedOrders;
             }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-            return updatedOrders;
         });
     }, [orderType]);
 
+
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Printing team received order delete notification:', deleteData);
-        try {
-            const { orderId, orderNumber } = deleteData;
-            if (!orderId) {
-                console.warn('No order ID in delete notification');
-                return;
-            }
+        console.log('🗑️ Received order delete notification:', deleteData);
 
-            setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-                return updatedOrders;
-            });
+        const { orderId, orderNumber } = deleteData;
+        if (!orderId) return;
 
-            setFilteredOrders(prevFiltered => {
-                return prevFiltered.filter(order => order._id !== orderId);
-            });
-            deleteOrderFromLocalStorage(orderId);
-            toast.success(`Order #${orderNumber} has been deleted`);
+        setOrders(prevOrders => {
+            const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
+            return updatedOrders;
+        });
 
-        } catch (error) {
-            console.error('Error handling order delete notification:', error);
-        }
+        setFilteredOrders(prevFiltered => {
+            return prevFiltered.filter(order => order._id !== orderId);
+        });
+
+        deleteOrderFromLocalStorage(orderId);
+        toast.success(`Order #${orderNumber} has been deleted`);
     }, [orderType]);
 
-    // Updated useEffect to include the new decoration event
+
     useEffect(() => {
         if (!socket) return;
-
-        const handleNewOrder = (orderData) => {
-            console.log('📦 Printing team received new order:', orderData);
-            if (!orderData.orderData) return;
-            const newOrder = orderData.orderData;
-
-            if (!hasPrintingAssignments(newOrder)) {
-                console.log('Order has no printing assignments, ignoring');
-                return;
-            }
-
-            const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
-            if (orderStatus !== currentViewType) {
-                console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-                return;
-            }
-
-            setOrders(prevOrders => {
-                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
-                let updatedOrders;
-                if (existingOrderIndex >= 0) {
-                    // For initial orders, we can replace since there shouldn't be decoration sequences yet
-                    updatedOrders = [...prevOrders];
-                    updatedOrders[existingOrderIndex] = newOrder;
-                    console.log('🔄 Replaced initial order:', newOrder.order_number);
-                } else {
-                    updatedOrders = [newOrder, ...prevOrders];
-                    console.log('➕ Added new initial order:', newOrder.order_number);
-                }
-
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-                return updatedOrders;
-            });
-
-            toast.success(`📦 New order #${newOrder.order_number} received!`, { duration: 4000 });
-        };
 
         socket.on('new-order', handleNewOrder);
         socket.on('order-updated', handleOrderUpdate);
@@ -387,11 +390,13 @@ const DecoPrintOrders = ({ orderType }) => {
             socket.off('order-deleted', handleOrderDeleted);
             socket.off('decoration-order-ready', handleDecorationOrderReady);
         };
-    }, [socket, handleOrderUpdate, handleOrderDeleted, handleDecorationOrderReady, orderType]);
+    }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted, handleDecorationOrderReady]);
 
     const fetchPrintOrders = async (type = orderType) => {
         try {
             setLoading(true);
+
+            // Check cache first
             if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
                 const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
                 setOrders(cachedOrders);
@@ -400,9 +405,11 @@ const DecoPrintOrders = ({ orderType }) => {
                 return;
             }
 
+            // Fetch from backend
             const response = await axios.get(`http://localhost:5000/api/print?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
 
+            // Backend already provides filtered and validated data
             saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.PRINTING);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
@@ -416,6 +423,7 @@ const DecoPrintOrders = ({ orderType }) => {
     useEffect(() => {
         fetchPrintOrders(orderType);
     }, [orderType]);
+
 
     useEffect(() => {
         if (orders.length > 0) {
@@ -446,54 +454,17 @@ const DecoPrintOrders = ({ orderType }) => {
         }
     }, [searchTerm, orders]);
 
-    const handleClose = () => {
-        setShowModal(false);
-        setSelectedOrder(null);
-        setSelectedItem(null);
-    };
+    const updateOrderStatus = (updatedOrder) => {
+        const isCompleted = isOrderCompleted(updatedOrder);
+        const newStatus = isCompleted ? 'Completed' : 'Pending';
 
-    const handleEditClick = (order, item) => {
-        setSelectedOrder(order);
-        setSelectedItem(item);
-        setShowModal(true);
-    };
-
-    const handleLocalOrderUpdate = (updatedOrder) => {
-        const processedOrder = updateOrderStatus(updatedOrder);
-        const updatedOrders = orders.map(order =>
-            order._id === processedOrder._id ? processedOrder : order
-        );
-
-        const currentOrderType = orderType.toLowerCase();
-        const newOrderStatus = processedOrder.order_status?.toLowerCase();
-
-        if ((currentOrderType === 'pending' && newOrderStatus === 'completed') ||
-            (currentOrderType === 'completed' && newOrderStatus !== 'completed')) {
-            const filteredUpdatedOrders = updatedOrders.filter(order => order._id !== processedOrder._id);
-            setOrders(filteredUpdatedOrders);
-            setFilteredOrders(filteredUpdatedOrders);
-        } else {
-            setOrders(updatedOrders);
-            setFilteredOrders(updatedOrders);
+        if (updatedOrder.order_status !== newStatus) {
+            updatedOrder.order_status = newStatus;
         }
 
-        handleClose();
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.PRINTING);
+        return updatedOrder;
     };
-
-    const indexOfLastOrder = currentPage * ordersPerPage;
-    const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-    const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-    const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
-
-    const handlePageChange = (pageNumber) => {
-        setCurrentPage(pageNumber);
-    };
-
-    const handleOrdersPerPageChange = (e) => {
-        setOrdersPerPage(Number(e.target.value));
-        setCurrentPage(1);
-    };
-
 
     const renderOrderTable = () => {
         if (currentOrders.length === 0) {
@@ -652,6 +623,57 @@ const DecoPrintOrders = ({ orderType }) => {
             </>
         );
     };
+
+    const handleClose = () => {
+        setShowModal(false);
+        setSelectedOrder(null);
+        setSelectedItem(null);
+    };
+
+    const handleEditClick = (order, item) => {
+        setSelectedOrder(order);
+        setSelectedItem(item);
+        setShowModal(true);
+    };
+
+    const handleLocalOrderUpdate = (updatedOrder) => {
+        const processedOrder = updateOrderStatus(updatedOrder);
+        const updatedOrders = orders.map(order =>
+            order._id === processedOrder._id ? processedOrder : order
+        );
+
+        const currentOrderType = orderType.toLowerCase();
+        const newOrderStatus = processedOrder.order_status?.toLowerCase();
+
+        if ((currentOrderType === 'pending' && newOrderStatus === 'completed') ||
+            (currentOrderType === 'completed' && newOrderStatus !== 'completed')) {
+            const filteredUpdatedOrders = updatedOrders.filter(order => order._id !== processedOrder._id);
+            setOrders(filteredUpdatedOrders);
+            setFilteredOrders(filteredUpdatedOrders);
+        } else {
+            setOrders(updatedOrders);
+            setFilteredOrders(updatedOrders);
+        }
+
+        handleClose();
+    };
+
+    const indexOfLastOrder = currentPage * ordersPerPage;
+    const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
+    const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+    const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
+
+    const handlePageChange = (pageNumber) => {
+        setCurrentPage(pageNumber);
+    };
+
+    const handleOrdersPerPageChange = (e) => {
+        setOrdersPerPage(Number(e.target.value));
+        setCurrentPage(1);
+    };
+
+
+
 
     return (
         <div className="flex flex-col h-full">
