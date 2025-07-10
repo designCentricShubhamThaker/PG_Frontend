@@ -146,26 +146,26 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
-               
+
 
                 if (notifyProgressUpdate) {
-  notifyProgressUpdate({
-    orderNumber: orderData.order_number,
-    itemName: itemData.name,
-    team: user.team,
-    updates: updates.map(update => ({
-      assignmentId: update.assignmentId,
-      quantity: update.newEntry.quantity,
-      notes: update.newEntry.notes,
-      newTotalCompleted: update.newTotalCompleted,
-      newStatus: update.newStatus
-    })),
-    updatedOrder: updatedOrder,
-    customerName: orderData.customer_name,
-    dispatcherName: orderData.dispatcher_name,
-    timestamp: new Date().toISOString() // ✅ ADD THIS
-  });
-}
+                    notifyProgressUpdate({
+                        orderNumber: orderData.order_number,
+                        itemName: itemData.name,
+                        team: user.team,
+                        updates: updates.map(update => ({
+                            assignmentId: update.assignmentId,
+                            quantity: update.newEntry.quantity,
+                            notes: update.newEntry.notes,
+                            newTotalCompleted: update.newTotalCompleted,
+                            newStatus: update.newStatus
+                        })),
+                        updatedOrder: updatedOrder,
+                        customerName: orderData.customer_name,
+                        dispatcherName: orderData.dispatcher_name,
+                        timestamp: new Date().toISOString() // ✅ ADD THIS
+                    });
+                }
 
 
                 setSuccessMessage('Quantities updated successfully!');

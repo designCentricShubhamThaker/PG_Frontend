@@ -11,7 +11,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
-const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
+const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -21,20 +21,15 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
     useEffect(() => {
         if (isOpen && itemData?.team_assignments?.printing) {
-            const processedAssignments = itemData.team_assignments.printing.map(assignment => {
-                console.log('Processing assignment:', assignment._id, 'isNew:', assignment.isNewAssignment ?? false);
-                return {
-                    ...assignment,
-                    todayQty: 0,
-                    notes: '',
-                    isNewAssignment: assignment.isNewAssignment ?? false // 🔒 prevent undefined
-                };
-            });
-
-            setAssignments(processedAssignments);
+            setAssignments(itemData.team_assignments.printing.map(assignment => ({
+                ...assignment,
+                todayQty: 0,
+                notes: ''
+            })));
+            setError(null);
+            setSuccessMessage('');
         }
     }, [isOpen, itemData]);
-
 
     const handleQuantityChange = (assignmentIndex, value) => {
         const newAssignments = [...assignments];
@@ -76,46 +71,24 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
     const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
-            // 🔥 FIX: Determine order type based on completion status
-            const isCompleted = updatedOrder.item_ids?.every(item => {
-                const printingAssignments = item.team_assignments?.printing || [];
-                if (printingAssignments.length === 0) return false;
-                return printingAssignments.every(assignment => {
-                    const completed = assignment.team_tracking?.total_completed_qty || 0;
-                    const total = assignment.quantity || 0;
-                    return completed >= total;
-                });
-            });
+            const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
+            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.PRINTING);
+            const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
-            const orderType = isCompleted ? 'completed' : 'pending';
+            if (orderIndex !== -1) {
+                existingOrders[orderIndex] = updatedOrder;
+            } else {
+                existingOrders.push(updatedOrder);
+            }
 
-            // 🔥 FIX: Update both order types to handle status changes
-            ['pending', 'completed'].forEach(type => {
-                const existingOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
-                const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
+            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.PRINTING);
 
-                if (type === orderType) {
-                    // Add/update in correct type
-                    if (orderIndex !== -1) {
-                        existingOrders[orderIndex] = updatedOrder;
-                    } else {
-                        existingOrders.unshift(updatedOrder);
-                    }
-                    saveTeamOrdersToLocalStorage(existingOrders, type, TEAMS.PRINTING);
-                } else {
-                    // Remove from incorrect type
-                    if (orderIndex !== -1) {
-                        existingOrders.splice(orderIndex, 1);
-                        saveTeamOrdersToLocalStorage(existingOrders, type, TEAMS.PRINTING);
-                    }
-                }
-            });
-
-            console.log('LocalStorage updated successfully for order type:', orderType);
+            console.log('LocalStorage updated successfully');
         } catch (error) {
             console.error('Error updating localStorage:', error);
         }
     };
+
     const handleSave = async () => {
         try {
             setLoading(true);
@@ -131,12 +104,11 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         date: new Date().toISOString(),
                         quantity: assignment.todayQty,
                         notes: assignment.notes || '',
-                        operator: user?.name || 'Current User' // 🔥 FIX: Use actual user name
+                        operator: 'Current User'
                     };
 
                     return {
-                        // ✅ Use the actual assignment ID from the database
-                        assignmentId: assignment._id, // This is the correct ID
+                        assignmentId: assignment._id,
                         newEntry,
                         newTotalCompleted: newCompleted,
                         newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress'
@@ -149,21 +121,22 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 return;
             }
 
-            // Validation
-            for (let i = 0; i < assignments.length; i++) {
+            for (let i = 0; i < updates.length; i++) {
                 const assignment = assignments[i];
-                if (assignment.todayQty > 0) {
-                    const remaining = getRemainingQty(assignment);
-                    if (assignment.todayQty > remaining) {
-                        setError(`Quantity for ${assignment.glass_name || assignment.printing_name} exceeds remaining amount (${remaining})`);
-                        setLoading(false);
-                        return;
-                    }
+                const remaining = getRemainingQty(assignment);
+
+                if (assignment.todayQty > remaining) {
+                    setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
+                    setLoading(false);
+                    return;
                 }
             }
 
-            console.log('Sending updates with assignment IDs:', updates.map(u => u.assignmentId));
-
+            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/glass', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
             const response = await axios.patch('http://localhost:5000/api/print', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
@@ -174,11 +147,13 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 const updatedOrder = response.data.data.order;
                 updateLocalStorageWithOrder(updatedOrder);
 
+
                 if (notifyProgressUpdate) {
                     notifyProgressUpdate({
                         orderNumber: orderData.order_number,
                         itemName: itemData.name,
                         team: user.team,
+                        updateSource: 'printing_update', // 🔥 ADD THIS LINE
                         updates: updates.map(update => ({
                             assignmentId: update.assignmentId,
                             quantity: update.newEntry.quantity,
@@ -188,9 +163,9 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         })),
                         updatedOrder: updatedOrder,
                         customerName: orderData.customer_name,
-                        dispatcherName: orderData.dispatcher_name
+                        dispatcherName: orderData.dispatcher_name,
+                        timestamp: new Date().toISOString()
                     });
-                    console.log('Progress notification sent');
                 }
 
                 setSuccessMessage('Quantities updated successfully!');
@@ -204,7 +179,16 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             }
         } catch (err) {
             console.error('Error updating quantities:', err);
-            setError(err.response?.data?.message || err.message || 'Failed to update quantities');
+
+            let errorMessage = 'Failed to update quantities';
+
+            if (err.response?.data?.message) {
+                errorMessage = err.response.data.message;
+            } else if (err.message) {
+                errorMessage = err.message;
+            }
+
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -413,4 +397,4 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     );
 };
 
-export default UpdatePrintQty;
+export default UpdateGlassQty;
