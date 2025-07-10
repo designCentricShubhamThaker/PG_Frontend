@@ -111,7 +111,10 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         assignmentId: assignment._id,
                         newEntry,
                         newTotalCompleted: newCompleted,
-                        newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress'
+                        newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
+                        glass_name: assignment.glass_name,
+                        quantity: assignment.quantity,
+                        glassItemId: assignment._id
                     };
                 });
 

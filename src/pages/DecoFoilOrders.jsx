@@ -1,8 +1,9 @@
-import { Search, Package } from 'lucide-react';
+import { Search, Pencil, Package } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
 import { toast } from 'react-hot-toast';
+
 import {
     TEAMS,
     deleteOrderFromLocalStorage,
@@ -11,8 +12,8 @@ import {
     saveOrdersToLocalStorage as saveTeamOrdersToLocalStorage,
     updateOrderInLocalStorage
 } from '../utils/localStorageUtils.jsx';
-import { useSocket } from '../context/SocketContext.jsx';
 import UpdateFoilQty from '../updateQuanityComponents/updateFoilQty.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const DecoFoilOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
@@ -27,7 +28,6 @@ const DecoFoilOrders = ({ orderType }) => {
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
 
-    // Utility functions for status calculation
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
         const total = assignment.quantity || 0;
@@ -53,317 +53,344 @@ const DecoFoilOrders = ({ orderType }) => {
         return items.every(item => isItemCompleted(item));
     };
 
-    const orderMatchesCurrentView = (order) => {
-        const orderStatus = isOrderCompleted(order) ? 'completed' : 'pending';
-        const currentViewType = orderType.toLowerCase();
-        return orderStatus === currentViewType;
-    };
+    const updateOrderStatus = (updatedOrder) => {
+        const isCompleted = isOrderCompleted(updatedOrder);
+        const newStatus = isCompleted ? 'Completed' : 'Pending';
 
-    // Function to check if an item is valid for foiling team
-    const isValidFoilingItem = (item) => {
-        const foilingAssignments = item.team_assignments?.foiling || [];
-        const printingAssignments = item.team_assignments?.printing || [];
-
-        // Must have foiling assignments
-        if (foilingAssignments.length === 0) {
-            return false;
+        if (updatedOrder.order_status !== newStatus) {
+            updatedOrder.order_status = newStatus;
         }
 
-        // Check if all foiling assignments have their corresponding printing completed
-        return foilingAssignments.every(foilingAssignment => {
-            const correspondingPrinting = printingAssignments.find(printing =>
-                printing._id?.toString() === foilingAssignment.printing_item_id?.toString()
-            );
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.FOILING);
 
-            if (!correspondingPrinting) {
-                console.log(`❌ No corresponding printing found for foiling assignment: ${foilingAssignment.printing_item_id}`);
-                return false;
-            }
-
-            const isPrintingCompleted = correspondingPrinting.team_tracking?.total_completed_qty >= correspondingPrinting.quantity;
-            console.log(`🔍 Printing ${correspondingPrinting.glass_name} completion check:`, {
-                completed: correspondingPrinting.team_tracking?.total_completed_qty || 0,
-                required: correspondingPrinting.quantity,
-                isCompleted: isPrintingCompleted
-            });
-
-            return isPrintingCompleted;
-        });
+        return updatedOrder;
     };
 
-    // Function to filter order items for foiling team
-    const filterOrderForFoilingTeam = (order) => {
-        const validItems = order.item_ids?.filter(item => {
-            const isValid = isValidFoilingItem(item);
-            console.log(`🔍 Item ${item.name} validation for foiling team: ${isValid ? 'VALID' : 'INVALID'}`);
-            return isValid;
-        }) || [];
-
-        return {
-            ...order,
-            item_ids: validItems
-        };
-    };
-
-    const updateOrAddOrder = (newOrderData) => {
-        console.log('📦 Processing:', newOrderData.order_number);
-
-        // FIRST: Filter the order to only include valid items for foiling team
-        const filteredOrderData = filterOrderForFoilingTeam(newOrderData);
-
-        console.log(`📊 Filtered order - Original items: ${newOrderData.item_ids?.length || 0}, Valid items: ${filteredOrderData.item_ids?.length || 0}`);
-
-        const hasFoiling = filteredOrderData.item_ids?.some(
-            item => item.team_assignments?.foiling?.length > 0
+    const hasfoilingAssignments = (order) => {
+        return order.item_ids?.some(item =>
+            item.team_assignments?.foiling && item.team_assignments.foiling.length > 0
         );
-
-        if (!hasFoiling) {
-            console.log('❌ No valid foiling assignments found after filtering');
-            return;
-        }
-
-        if (!orderMatchesCurrentView(filteredOrderData)) {
-            console.log('❌ Order does not match current view after filtering');
-            return;
-        }
-
-        setOrders(prev => {
-            const idx = prev.findIndex(o => o._id === filteredOrderData._id);
-
-            if (idx >= 0) {
-                const merged = mergeOrderData(prev[idx], filteredOrderData);
-
-                // IMPORTANT: Re-filter after merging to ensure no invalid items slip through
-                const finalFiltered = filterOrderForFoilingTeam(merged);
-
-                if (!finalFiltered.item_ids?.length) {
-                    console.log('🗑️ No valid items after merge and filter - removing order');
-                    const filtered = prev.filter(o => o._id !== merged._id);
-                    saveTeamOrdersToLocalStorage(filtered, orderType, TEAMS.FOILING);
-                    setFilteredOrders(filtered);
-                    return filtered;
-                }
-
-                const updated = [...prev];
-                updated[idx] = finalFiltered;
-                saveTeamOrdersToLocalStorage(updated, orderType, TEAMS.FOILING);
-                setFilteredOrders(updated);
-                return updated;
-            } else {
-                const updated = [filteredOrderData, ...prev];
-                saveTeamOrdersToLocalStorage(updated, orderType, TEAMS.FOILING);
-                setFilteredOrders(updated);
-                return updated;
-            }
-        });
-    };
-
-    const mergeOrderData = (existingOrder, newOrderData) => {
-        const mergedOrder = { ...existingOrder };
-        mergedOrder.updated_at = newOrderData.updated_at || existingOrder.updated_at;
-
-        const itemMap = new Map();
-
-        // Step 1: Add all existing items first
-        existingOrder.item_ids?.forEach(item => {
-            if (!item || !item._id) return;
-            itemMap.set(item._id, item);
-        });
-
-        // Step 2: Merge new items
-        newOrderData.item_ids?.forEach(newItem => {
-            if (!newItem || !newItem._id) return;
-
-            const existingItem = itemMap.get(newItem._id) || {};
-
-            const mergedFoilingAssignments = mergeFoilingAssignments(
-                existingItem.team_assignments?.foiling || [],
-                newItem.team_assignments?.foiling || []
-            );
-
-            // IMPORTANT: Also merge printing assignments for validation
-            const mergedPrintingAssignments = mergePrintingAssignments(
-                existingItem.team_assignments?.printing || [],
-                newItem.team_assignments?.printing || []
-            );
-
-            const mergedItem = {
-                ...existingItem,
-                ...newItem,
-                team_assignments: {
-                    ...(existingItem.team_assignments || {}),
-                    ...(newItem.team_assignments || {}),
-                    foiling: mergedFoilingAssignments,
-                    printing: mergedPrintingAssignments
-                }
-            };
-
-            itemMap.set(newItem._id, mergedItem);
-        });
-
-        // Step 3: Only include items that are valid for foiling team
-        const validItems = Array.from(itemMap.values()).filter(item => {
-            const hasValidFoilingAssignments = item.team_assignments?.foiling?.length > 0;
-            const isValidForFoiling = isValidFoilingItem(item);
-
-            console.log(`🔍 Merge validation for item ${item.name}:`, {
-                hasFoilingAssignments: hasValidFoilingAssignments,
-                isValidForFoiling: isValidForFoiling,
-                included: hasValidFoilingAssignments && isValidForFoiling
-            });
-
-            return hasValidFoilingAssignments && isValidForFoiling;
-        });
-
-        mergedOrder.item_ids = validItems;
-        return mergedOrder;
-    };
-
-    const mergeFoilingAssignments = (existingAssignments, newAssignments) => {
-        console.log('🔄 Merging foiling assignments');
-
-        const assignmentMap = new Map();
-
-        // Add existing assignments first
-        existingAssignments.forEach(assignment => {
-            if (assignment && assignment._id) {
-                assignmentMap.set(assignment._id, assignment);
-            }
-        });
-
-        // Override or add with new assignments
-        newAssignments.forEach(assignment => {
-            if (assignment && assignment._id) {
-                assignmentMap.set(assignment._id, assignment);  // Replace if exists
-            }
-        });
-
-        const mergedAssignments = Array.from(assignmentMap.values());
-        console.log(`✅ Merged ${mergedAssignments.length} foiling assignments`);
-
-        return mergedAssignments;
-    };
-
-    // Function to merge printing assignments
-    const mergePrintingAssignments = (existingAssignments, newAssignments) => {
-        console.log('🔄 Merging printing assignments');
-
-        const assignmentMap = new Map();
-
-        // Add existing assignments first
-        existingAssignments.forEach(assignment => {
-            if (assignment && assignment._id) {
-                assignmentMap.set(assignment._id, assignment);
-            }
-        });
-
-        // Override or add with new assignments
-        newAssignments.forEach(assignment => {
-            if (assignment && assignment._id) {
-                assignmentMap.set(assignment._id, assignment);  // Replace if exists
-            }
-        });
-
-        const mergedAssignments = Array.from(assignmentMap.values());
-        console.log(`✅ Merged ${mergedAssignments.length} printing assignments`);
-
-        return mergedAssignments;
     };
 
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 New order received:', orderData);
+        if (!orderData.orderData) return;
+        const newOrder = orderData.orderData;
+        const targetGlassItem = orderData.targetGlassItem;
 
-        if (!orderData.orderData) {
-            console.log('❌ No order data provided');
-            return;
-        }
-
-        updateOrAddOrder(orderData.orderData);
-        toast.success(`📦 New order #${orderData.orderData.order_number} received!`, { duration: 4000 });
-    }, [orderType]);
-
-    const handleOrderUpdate = useCallback(({ orderData, wasRemoved, hasAssignments }) => {
-        if (!orderData) return;
-
-        if (wasRemoved || !hasAssignments) {
-            setOrders(prev => {
-                const filtered = prev.filter(o => o._id !== orderData._id);
-                saveTeamOrdersToLocalStorage(filtered, orderType, TEAMS.FOILING);
-                setFilteredOrders(filtered);
-                return filtered;
-            });
-            deleteOrderFromLocalStorage(orderData._id);
-            toast.success(`🗑️ Order #${orderData.order_number} removed`);
-            return;
-        }
-
-        updateOrAddOrder(orderData);
-        toast.success(`✏️ Order #${orderData.order_number} updated`);
-    }, [orderType]);
-
-    const handleOrderDeleted = useCallback(({ orderId, orderNumber }) => {
-        if (!orderId) return;
-        setOrders(prev => {
-            const filtered = prev.filter(o => o._id !== orderId);
-            saveTeamOrdersToLocalStorage(filtered, orderType, TEAMS.FOILING);
-            setFilteredOrders(filtered);
-            return filtered;
+        console.log('🔍 New order received:', {
+            orderNumber: newOrder.order_number,
+            targetGlassItem,
+            hasTargetGlass: !!targetGlassItem
         });
-        deleteOrderFromLocalStorage(orderId);
-        toast.success(`🗑️ Order #${orderNumber} deleted`);
+
+        if (!hasfoilingAssignments(newOrder)) {
+            console.log('Order has no foiling assignments, ignoring');
+            return;
+        }
+
+        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
+        if (orderStatus !== currentViewType) {
+            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+            return;
+        }
+
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+            let updatedOrders;
+
+            if (existingOrderIndex >= 0) {
+                // Merge with existing order
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+                console.log('✅ Merged new order data:', newOrder.order_number);
+            } else {
+                updatedOrders = [newOrder, ...prevOrders];
+                console.log('✅ Added new order:', newOrder.order_number);
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
+            return updatedOrders;
+        });
     }, [orderType]);
 
-    const handleTeamProgressUpdate = useCallback((progressData) => {
-        console.log('📈 Team progress update received:', progressData);
+    // ✅ FIXED: Proper merge logic that handles both filtered and full orders
+    const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
+        console.log('🔧 Merging orders:', {
+            existingOrderId: existingOrder._id,
+            newOrderId: newOrder._id,
+            targetGlassItem,
+            isFiltered: !!targetGlassItem
+        });
 
-        if (!progressData.orderData) return;
+        const existingItemsMap = {};
+        const newItemsMap = {};
 
-        updateOrAddOrder(progressData.orderData);
+        (existingOrder.item_ids || []).forEach(item => {
+            existingItemsMap[item._id] = item;
+        });
+
+        (newOrder.item_ids || []).forEach(item => {
+            newItemsMap[item._id] = item;
+        });
+
+        const mergedItems = [];
+
+        if (targetGlassItem) {
+            // For filtered orders (from decoration sequence), add new assignments precisely
+            console.log('🎯 Processing filtered order for glass:', targetGlassItem);
+
+            // First, process items from the new (filtered) order
+            Object.values(newItemsMap).forEach(newItem => {
+                if (existingItemsMap[newItem._id]) {
+                    // Merge existing item with new assignments for the target glass
+                    const existingItem = existingItemsMap[newItem._id];
+                    const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
+                    mergedItems.push(mergedItem);
+                    console.log('✅ Merged item:', newItem.name, 'for glass:', targetGlassItem);
+                } else {
+                    // New item, add as is
+                    mergedItems.push(newItem);
+                    console.log('✅ Added new item:', newItem.name);
+                }
+            });
+
+            // Then, preserve existing items that have assignments for OTHER glasses
+            Object.values(existingItemsMap).forEach(existingItem => {
+                if (!newItemsMap[existingItem._id]) {
+                    // Keep assignments for glasses OTHER than the target glass
+                    const otherGlassAssignments = (existingItem.team_assignments?.foiling || [])
+                        .filter(assignment => {
+                            const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                            return assignmentGlassId?.toString() !== targetGlassItem?.toString();
+                        });
+
+                    if (otherGlassAssignments.length > 0) {
+                        mergedItems.push({
+                            ...existingItem,
+                            team_assignments: {
+                                ...existingItem.team_assignments,
+                                foiling: otherGlassAssignments
+                            }
+                        });
+                        console.log('✅ Preserved item with other glass assignments:', existingItem.name);
+                    }
+                }
+            });
+        } else {
+            // For full order updates, use standard merge logic
+            console.log('🔄 Processing full order update');
+
+            // Process all existing items
+            Object.values(existingItemsMap).forEach(existingItem => {
+                if (newItemsMap[existingItem._id]) {
+                    const newItem = newItemsMap[existingItem._id];
+                    const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
+                    mergedItems.push(mergedItem);
+                } else {
+                    mergedItems.push(existingItem);
+                }
+            });
+
+            // Add any completely new items
+            Object.values(newItemsMap).forEach(newItem => {
+                if (!existingItemsMap[newItem._id]) {
+                    mergedItems.push(newItem);
+                }
+            });
+        }
+
+        console.log('🎯 Merge result:', {
+            totalItems: mergedItems.length,
+            itemNames: mergedItems.map(item => item.name),
+            targetGlassItem
+        });
+
+        return {
+            ...existingOrder,
+            ...newOrder,
+            item_ids: mergedItems
+        };
+    };
+
+    // ✅ FIXED: Assignment merging that properly handles targeted updates
+    const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
+        const existingAssignments = existingItem.team_assignments?.foiling || [];
+        const newAssignments = newItem.team_assignments?.foiling || [];
+
+        console.log('🔧 Merging item assignments:', {
+            itemName: existingItem.name,
+            existingCount: existingAssignments.length,
+            newCount: newAssignments.length,
+            targetGlassItem
+        });
+
+        if (targetGlassItem) {
+            // For targeted updates, replace only assignments for the specific glass
+            const existingAssignmentsForOtherGlasses = existingAssignments.filter(assignment => {
+                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                return assignmentGlassId?.toString() !== targetGlassItem?.toString();
+            });
+
+            const newAssignmentsForTargetGlass = newAssignments.filter(assignment => {
+                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                return assignmentGlassId?.toString() === targetGlassItem?.toString();
+            });
+
+            const mergedfoilingAssignments = [...existingAssignmentsForOtherGlasses, ...newAssignmentsForTargetGlass];
+
+            console.log('🎯 Targeted merge result:', {
+                keptOtherGlasses: existingAssignmentsForOtherGlasses.length,
+                addedTargetGlass: newAssignmentsForTargetGlass.length,
+                total: mergedfoilingAssignments.length
+            });
+
+            return {
+                ...existingItem,
+                ...newItem,
+                team_assignments: {
+                    ...existingItem.team_assignments,
+                    ...newItem.team_assignments,
+                    foiling: mergedfoilingAssignments
+                }
+            };
+        } else {
+            // For full updates, replace assignments by glass ID
+            const keptAssignments = existingAssignments.filter(existingAssignment => {
+                const existingGlassId = existingAssignment.glass_item_id?._id || existingAssignment.glass_item_id;
+                return !newAssignments.some(newAssignment => {
+                    const newGlassId = newAssignment.glass_item_id?._id || newAssignment.glass_item_id;
+                    return newGlassId?.toString() === existingGlassId?.toString();
+                });
+            });
+
+            const mergedfoilingAssignments = [...keptAssignments, ...newAssignments];
+
+            console.log('🔄 Full merge result:', {
+                keptExisting: keptAssignments.length,
+                addedNew: newAssignments.length,
+                total: mergedfoilingAssignments.length
+            });
+
+            return {
+                ...existingItem,
+                ...newItem,
+                team_assignments: {
+                    ...existingItem.team_assignments,
+                    ...newItem.team_assignments,
+                    foiling: mergedfoilingAssignments
+                }
+            };
+        }
+    };
+
+    const handleOrderUpdate = useCallback((updateData) => {
+        if (!updateData.orderData) return;
+        const updatedOrder = updateData.orderData;
+        const targetGlassItem = updateData.targetGlassItem;
+
+        console.log('🔄 Order update received:', {
+            orderNumber: updatedOrder.order_number,
+            targetGlassItem,
+            wasRemoved: updateData.wasRemoved
+        });
+
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
+
+            if (updateData.wasRemoved || !hasfoilingAssignments(updatedOrder)) {
+                console.log('🗑️ Removing order from foiling:', updatedOrder.order_number);
+                if (existingOrderIndex >= 0) {
+                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.FOILING);
+                    return filteredOrders;
+                }
+                return prevOrders;
+            }
+
+            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+            const currentViewType = orderType.toLowerCase();
+
+            if (orderStatus !== currentViewType) {
+                if (existingOrderIndex >= 0) {
+                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.FOILING);
+                    return filteredOrders;
+                }
+                return prevOrders;
+            }
+
+            let updatedOrders;
+            if (existingOrderIndex >= 0) {
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+                console.log('✅ Updated existing order:', updatedOrder.order_number);
+            } else {
+                updatedOrders = [updatedOrder, ...prevOrders];
+                console.log('✅ Added new order:', updatedOrder.order_number);
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
+            return updatedOrders;
+        });
     }, [orderType]);
 
-    // Register socket listeners
+    const handleOrderDeleted = useCallback((deleteData) => {
+        try {
+            const { orderId, orderNumber } = deleteData;
+            if (!orderId) {
+                console.warn('No order ID in delete notification');
+                return;
+            }
+            setOrders(prevOrders => {
+                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
+                return updatedOrders;
+            });
+            setFilteredOrders(prevFiltered => {
+                return prevFiltered.filter(order => order._id !== orderId);
+            });
+            deleteOrderFromLocalStorage(orderId);
+        } catch (error) {
+            console.error('Error handling order delete notification:', error);
+        }
+    }, [orderType]);
+
     useEffect(() => {
         if (!socket) return;
-
-        console.log('🔌 Registering socket listeners for foiling team');
-
-        // Listen for all relevant events
         socket.on('new-order', handleNewOrder);
         socket.on('order-updated', handleOrderUpdate);
         socket.on('order-deleted', handleOrderDeleted);
-        socket.on('team-progress-updated', handleTeamProgressUpdate);
 
         return () => {
-            console.log('🔌 Cleaning up socket listeners');
             socket.off('new-order', handleNewOrder);
             socket.off('order-updated', handleOrderUpdate);
             socket.off('order-deleted', handleOrderDeleted);
-            socket.off('team-progress-updated', handleTeamProgressUpdate);
         };
-    }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted, handleTeamProgressUpdate]);
+    }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-    const fetchFoilOrders = async (type = orderType) => {
+    const fetchfoilingOrders = async (type = orderType) => {
         try {
             setLoading(true);
             if (hasTeamOrdersInLocalStorage(type, TEAMS.FOILING)) {
-                const cached = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
-                // IMPORTANT: Filter cached orders as well
-                const filteredCached = cached.map(order => filterOrderForFoilingTeam(order))
-                    .filter(order => order.item_ids?.length > 0);
-                setOrders(filteredCached);
-                setFilteredOrders(filteredCached);
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
+                setOrders(cachedOrders);
+                setFilteredOrders(cachedOrders);
                 setLoading(false);
                 return;
             }
 
-            const res = await axios.get(`http://localhost:5000/api/foil?orderType=${type}`);
-            const fetched = res.data.data || [];
-            // IMPORTANT: Filter fetched orders as well
-            const filteredFetched = fetched.map(order => filterOrderForFoilingTeam(order))
-                .filter(order => order.item_ids?.length > 0);
-            saveTeamOrdersToLocalStorage(filteredFetched, type, TEAMS.FOILING);
-            setOrders(filteredFetched);
-            setFilteredOrders(filteredFetched);
+            const response = await axios.get(`http://localhost:5000/api/foil?orderType=${type}`);
+            const fetchedOrders = response.data.data || [];
+
+            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.FOILING);
+            setOrders(fetchedOrders);
+            setFilteredOrders(fetchedOrders);
             setLoading(false);
         } catch (err) {
             setError('Failed to fetch foiling orders: ' + (err.response?.data?.message || err.message));
@@ -372,7 +399,7 @@ const DecoFoilOrders = ({ orderType }) => {
     };
 
     useEffect(() => {
-        fetchFoilOrders(orderType);
+        fetchfoilingOrders(orderType);
     }, [orderType]);
 
     useEffect(() => {
@@ -390,60 +417,20 @@ const DecoFoilOrders = ({ orderType }) => {
                         return true;
                     }
                     return item.team_assignments?.foiling?.some(foiling => {
-                        return foiling.glass_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        return foiling.foiling_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            foiling.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             foiling.decoration_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             foiling.weight?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            foiling.neck_size?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            foiling.foil_type?.toLowerCase().includes(searchTerm.toLowerCase());
+                            foiling.neck_size?.toLowerCase().includes(searchTerm.toLowerCase());
                     });
                 });
             });
 
             setFilteredOrders(filtered);
             setCurrentPage(1);
-        } else {
-            setFilteredOrders([]);
         }
     }, [searchTerm, orders]);
 
-    // Update order status and save to localStorage
-    const updateOrderStatus = (updatedOrder) => {
-        const isCompleted = isOrderCompleted(updatedOrder);
-        const newStatus = isCompleted ? 'Completed' : 'Pending';
-
-        if (updatedOrder.order_status !== newStatus) {
-            updatedOrder.order_status = newStatus;
-        }
-
-        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.FOILING);
-        return updatedOrder;
-    };
-
-    // Handle local order updates from quantity update modal
-    const handleLocalOrderUpdate = (updatedOrder) => {
-        const processedOrder = updateOrderStatus(updatedOrder);
-        const updatedOrders = orders.map(order =>
-            order._id === processedOrder._id ? processedOrder : order
-        );
-
-        const currentOrderType = orderType.toLowerCase();
-        const newOrderStatus = processedOrder.order_status?.toLowerCase();
-
-        // Remove order from current view if status changed
-        if ((currentOrderType === 'pending' && newOrderStatus === 'completed') ||
-            (currentOrderType === 'completed' && newOrderStatus !== 'completed')) {
-            const filteredUpdatedOrders = updatedOrders.filter(order => order._id !== processedOrder._id);
-            setOrders(filteredUpdatedOrders);
-            setFilteredOrders(filteredUpdatedOrders);
-        } else {
-            setOrders(updatedOrders);
-            setFilteredOrders(updatedOrders);
-        }
-
-        handleClose();
-    };
-
-    // Modal handlers
     const handleClose = () => {
         setShowModal(false);
         setSelectedOrder(null);
@@ -456,7 +443,29 @@ const DecoFoilOrders = ({ orderType }) => {
         setShowModal(true);
     };
 
-    // Pagination
+    const handleLocalOrderUpdate = (updatedOrder) => {
+        const processedOrder = updateOrderStatus(updatedOrder);
+        const updatedOrders = orders.map(order =>
+            order._id === processedOrder._id ? processedOrder : order
+        );
+
+        const currentOrderType = orderType.toLowerCase();
+        const newOrderStatus = processedOrder.order_status?.toLowerCase();
+
+        if ((currentOrderType === 'pending' && newOrderStatus === 'completed') ||
+            (currentOrderType === 'completed' && newOrderStatus !== 'completed')) {
+
+            const filteredUpdatedOrders = updatedOrders.filter(order => order._id !== processedOrder._id);
+            setOrders(filteredUpdatedOrders);
+            setFilteredOrders(filteredUpdatedOrders);
+        } else {
+            setOrders(updatedOrders);
+            setFilteredOrders(updatedOrders);
+        }
+
+        handleClose();
+    };
+
     const indexOfLastOrder = currentPage * ordersPerPage;
     const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
     const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
@@ -471,13 +480,12 @@ const DecoFoilOrders = ({ orderType }) => {
         setCurrentPage(1);
     };
 
-    // Render order table
     const renderOrderTable = () => {
         if (currentOrders.length === 0) {
             return (
                 <div className="flex flex-col items-center justify-center py-16 px-4">
-                    <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mb-4">
-                        <Package className="w-8 h-8 text-purple-400" />
+                    <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
+                        <Package className="w-8 h-8 text-orange-400" />
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No foiling orders found</h3>
                     <p className="text-sm text-gray-500 text-center max-w-sm">
@@ -487,31 +495,31 @@ const DecoFoilOrders = ({ orderType }) => {
             );
         }
 
-        const colorClasses = ['bg-purple-50', 'bg-purple-100', 'bg-indigo-50', 'bg-indigo-100'];
+        const colorClasses = ['bg-orange-50', 'bg-orange-100', 'bg-yellow-50', 'bg-yellow-100'];
 
         return (
             <>
-                <div className="bg-gradient-to-r from-purple-800 via-purple-600 to-purple-400 rounded-lg shadow-md py-3 px-4 mb-3">
+                <div className="bg-gradient-to-r from-orange-800 via-orange-600 to-orange-400 rounded-lg shadow-md py-3 px-4 mb-3">
                     <div
                         className="grid gap-2 text-white font-semibold text-xs items-center"
                         style={{
-                            gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
+                            gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
                         }}
                     >
                         <div className="text-left">Order #</div>
                         <div className="text-left">Item</div>
-                        <div className="text-left px-2">Glass Name</div>
+                        <div className="text-left px-2">Bottle Name</div>
                         <div className="text-left">Quantity</div>
                         <div className="text-left">Remaining</div>
                         <div className="text-left">Status</div>
                         <div className="text-left">Neck Size</div>
                         <div className="text-left">Weight</div>
-                        <div className="text-left">Foil Type</div>
                         <div className="text-left">Decoration #</div>
                         <div className="text-center">Action</div>
                     </div>
                 </div>
 
+                {/* Data Rows */}
                 {currentOrders.map((order, orderIndex) => {
                     let totalOrderRows = 0;
                     order.item_ids?.forEach(item => {
@@ -522,7 +530,7 @@ const DecoFoilOrders = ({ orderType }) => {
                     let currentRowInOrder = 0;
 
                     return (
-                        <div key={`order-${order._id}`} className="bg-white rounded-lg shadow-sm border border-purple-200 mb-3 overflow-hidden">
+                        <div key={`order-${order._id}`} className="bg-white rounded-lg shadow-sm border border-orange-200 mb-3 overflow-hidden">
                             {order.item_ids?.map((item, itemIndex) => {
                                 const foilingAssignments = item.team_assignments?.foiling || [];
                                 const assignments = foilingAssignments.length === 0 ? [null] : foilingAssignments;
@@ -534,15 +542,17 @@ const DecoFoilOrders = ({ orderType }) => {
                                     const isLastRowOfOrder = currentRowInOrder === totalOrderRows - 1;
                                     currentRowInOrder++;
 
+                                    // Calculate remaining qty and status for this assignment
                                     const remainingQty = foiling ? getRemainingQty(foiling) : 'N/A';
                                     const status = foiling ? getAssignmentStatus(foiling) : 'N/A';
 
+                                    // Status styling
                                     const getStatusStyle = (status) => {
                                         switch (status) {
                                             case 'Completed':
                                                 return 'text-green-600 font-semibold';
                                             case 'In Progress':
-                                                return 'text-purple-600 font-semibold';
+                                                return 'text-orange-600 font-semibold';
                                             case 'Pending':
                                                 return 'text-gray-600 font-semibold';
                                             default:
@@ -553,14 +563,14 @@ const DecoFoilOrders = ({ orderType }) => {
                                     return (
                                         <div
                                             key={`${order._id}-${item._id}-${foiling?._id || 'empty'}-${assignmentIndex}`}
-                                            className={`grid gap-2 items-center py-2 px-3 text-xs ${bgColor} ${!isLastRowOfOrder ? 'border-b border-purple-100' : ''}`}
+                                            className={`grid gap-2 items-center py-2 px-3 text-xs ${bgColor} ${!isLastRowOfOrder ? 'border-b border-orange-100' : ''}`}
                                             style={{
-                                                gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
+                                                gridTemplateColumns: '1fr 1.5fr 3fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr'
                                             }}
                                         >
                                             <div className="text-left">
                                                 {isFirstRowOfOrder ? (
-                                                    <span className="font-bold text-purple-800">{order.order_number}</span>
+                                                    <span className="font-bold text-orange-800">{order.order_number}</span>
                                                 ) : (
                                                     <span className="text-transparent">{order.order_number}</span>
                                                 )}
@@ -568,22 +578,22 @@ const DecoFoilOrders = ({ orderType }) => {
 
                                             <div className="text-left">
                                                 {isFirstRowOfItem ? (
-                                                    <span className="text-purple-800 font-medium">{item.name || 'N/A'}</span>
+                                                    <span className="text-orange-800 font-medium">{item.name || 'N/A'}</span>
                                                 ) : (
                                                     <span className="text-transparent">{item.name || 'N/A'}</span>
                                                 )}
                                             </div>
 
-                                            <div className="text-left text-purple-900 px-2">
+                                            <div className="text-left text-orange-900 px-2">
                                                 {foiling ? (foiling.glass_name || 'N/A') : 'N/A'}
                                             </div>
 
-                                            <div className="text-left text-purple-900">
+                                            <div className="text-left text-orange-900">
                                                 {foiling ? (foiling.quantity || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left">
-                                                <span className={`font-semibold ${remainingQty === 0 ? 'text-green-600' : 'text-purple-700'}`}>
+                                                <span className={`font-semibold ${remainingQty === 0 ? 'text-green-600' : 'text-orange-700'}`}>
                                                     {remainingQty}
                                                 </span>
                                             </div>
@@ -594,16 +604,12 @@ const DecoFoilOrders = ({ orderType }) => {
                                                 </span>
                                             </div>
 
-                                            <div className="text-left text-purple-900">
+                                            <div className="text-left text-orange-900">
                                                 {foiling ? (foiling.neck_size || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-gray-800">
                                                 {foiling ? (foiling.weight || 'N/A') : 'N/A'}
-                                            </div>
-
-                                            <div className="text-left text-purple-900">
-                                                {foiling ? (foiling.foil_type || 'N/A') : 'N/A'}
                                             </div>
 
                                             <div className="text-left text-gray-800">
@@ -614,7 +620,7 @@ const DecoFoilOrders = ({ orderType }) => {
                                                 {isFirstRowOfItem ? (
                                                     <button
                                                         onClick={() => handleEditClick(order, item)}
-                                                        className="inline-flex items-center justify-center p-1.5 bg-purple-600 rounded text-white hover:bg-purple-500 transition-colors duration-200 shadow-sm"
+                                                        className="inline-flex items-center justify-center p-1.5 bg-orange-600 rounded text-white hover:bg-orange-500 transition-colors duration-200 shadow-sm"
                                                         title="Edit quantities"
                                                     >
                                                         <FiEdit size={14} />
@@ -641,19 +647,14 @@ const DecoFoilOrders = ({ orderType }) => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-orange-700">
-                        Printing Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                        foiling Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
                     </h2>
-                    {isConnected && (
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-xs text-green-600">Connected</span>
-                        </div>
-                    )}
                 </div>
+
                 <div className="relative">
                     <input
                         type="text"
-                        placeholder="Search orders..."
+                        placeholder="Search..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"

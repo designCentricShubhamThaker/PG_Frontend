@@ -179,48 +179,60 @@ export const SocketProvider = ({ children }) => {
             return false;
         }
     }, [socket]);
-
     const notifyProgressUpdate = useCallback((progressData) => {
         if (!socket || !socket.connected || !progressData) {
-            console.warn('Cannot send progress notification - socket not connected or no data');
+            console.warn('⚠️ Cannot send progress notification - socket not connected or no data');
             return false;
         }
 
         try {
-            console.log('📤 Sending progress update:', progressData);
+            console.log('📤 Preparing to send progress update:', {
+                orderNumber: progressData.orderNumber,
+                team: progressData.team,
+                targetGlassItem: progressData.targetGlassItem,
+                hasCompletedWork: progressData.hasCompletedWork,
+                updatesCount: progressData.updates?.length || 0
+            });
 
             const notificationData = {
                 orderNumber: progressData.orderNumber,
                 itemName: progressData.itemName,
                 team: progressData.team,
+                targetGlassItem: progressData.targetGlassItem,
+                hasCompletedWork: progressData.hasCompletedWork,
                 updates: progressData.updates,
                 updatedOrder: progressData.updatedOrder,
                 timestamp: new Date().toISOString(),
                 customerName: progressData.customerName,
                 dispatcherName: progressData.dispatcherName,
-                completedItemId: progressData.completedItemId,
-                isFullyCompleted: progressData.isFullyCompleted
+                updateSource: progressData.updateSource
             };
 
-            console.log('📊 Progress notification data:', {
+            console.log('📊 Final progress notification data:', {
                 orderNumber: notificationData.orderNumber,
                 team: notificationData.team,
+                targetGlassItem: notificationData.targetGlassItem,
+                hasCompletedWork: notificationData.hasCompletedWork,
                 hasUpdatedOrder: !!notificationData.updatedOrder,
                 updatesCount: notificationData.updates?.length || 0
             });
 
             socket.emit('team-progress-updated', notificationData);
-            console.log('📤 Progress update notification sent:', {
+
+            console.log('✅ Progress update notification sent successfully:', {
                 order: progressData.orderNumber,
                 team: progressData.team,
+                targetGlass: progressData.targetGlassItem,
                 item: progressData.itemName
             });
+
             return true;
         } catch (error) {
-            console.error('Error sending progress notification:', error);
+            console.error('❌ Error sending progress notification:', error);
             return false;
         }
     }, [socket]);
+
 
     const notifyOrderDelete = useCallback((deleteData) => {
         if (!socket || !socket.connected || !deleteData) {

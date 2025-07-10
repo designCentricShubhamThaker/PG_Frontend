@@ -6,7 +6,8 @@ import axios from 'axios';
 import {
     TEAMS,
     saveOrdersToLocalStorage,
-    getOrdersFromLocalStorage
+    getOrdersFromLocalStorage,
+    updateOrderInLocalStorage
 } from '../utils/localStorageUtils';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -69,130 +70,208 @@ const UpdateGlassQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         return Math.max(total - completed, 0);
     };
 
-    const updateLocalStorageWithOrder = (updatedOrder) => {
-        try {
-            const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
-            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.PRINTING);
-            const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
-            if (orderIndex !== -1) {
-                existingOrders[orderIndex] = updatedOrder;
-            } else {
-                existingOrders.push(updatedOrder);
-            }
+   const handleSave = async () => {
+    try {
+        setLoading(true);
+        setError(null);
 
-            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.PRINTING);
+        const updates = assignments
+            .filter(assignment => assignment.todayQty > 0)
+            .map(assignment => {
+                const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
+                const newCompleted = currentCompleted + assignment.todayQty;
 
-            console.log('LocalStorage updated successfully');
-        } catch (error) {
-            console.error('Error updating localStorage:', error);
+                const newEntry = {
+                    date: new Date().toISOString(),
+                    quantity: assignment.todayQty,
+                    notes: assignment.notes || '',
+                    operator: user.name || 'Current User'
+                };
+
+                return {
+                    assignmentId: assignment._id,
+                    newEntry,
+                    newTotalCompleted: newCompleted,
+                    newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
+                    glass_item_id: assignment.glass_item_id,
+                    printing_name: assignment.printing_name,
+                    quantity: assignment.quantity
+                };
+            });
+
+        if (updates.length === 0) {
+            setError('Please enter quantity for at least one assignment');
+            setLoading(false);
+            return;
         }
-    };
 
-    const handleSave = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+        // Quantity validation
+        for (let i = 0; i < updates.length; i++) {
+            const assignment = assignments[i];
+            const remaining = getRemainingQty(assignment);
 
-            const updates = assignments
-                .filter(assignment => assignment.todayQty > 0)
-                .map(assignment => {
-                    const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
-                    const newCompleted = currentCompleted + assignment.todayQty;
-
-                    const newEntry = {
-                        date: new Date().toISOString(),
-                        quantity: assignment.todayQty,
-                        notes: assignment.notes || '',
-                        operator: 'Current User'
-                    };
-
-                    return {
-                        assignmentId: assignment._id,
-                        newEntry,
-                        newTotalCompleted: newCompleted,
-                        newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress'
-                    };
-                });
-
-            if (updates.length === 0) {
-                setError('Please enter quantity for at least one assignment');
+            if (assignment.todayQty > remaining) {
+                setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
                 setLoading(false);
                 return;
             }
+        }
 
-            for (let i = 0; i < updates.length; i++) {
-                const assignment = assignments[i];
-                const remaining = getRemainingQty(assignment);
+        console.log('📤 Sending update request for printing team:', {
+            orderNumber: orderData.order_number,
+            itemId: itemData._id,
+            updatesCount: updates.length,
+            team: user.team
+        });
 
-                if (assignment.todayQty > remaining) {
-                    setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
-                    setLoading(false);
-                    return;
-                }
-            }
+        const response = await axios.patch('http://localhost:5000/api/print', {
+            orderNumber: orderData.order_number,
+            itemId: itemData._id,
+            updates
+        });
 
-            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/glass', {
-            //     orderNumber: orderData.order_number,
-            //     itemId: itemData._id,
-            //     updates
-            // });
-            const response = await axios.patch('http://localhost:5000/api/print', {
-                orderNumber: orderData.order_number,
-                itemId: itemData._id,
-                updates
+        if (response.data.success) {
+            const updatedOrder = response.data.data.order;
+
+            const completedUpdates = updates.filter(update => update.newStatus === 'Completed');
+            const hasCompletedWork = completedUpdates.length > 0;
+            const targetAssignment = completedUpdates.length > 0 ? completedUpdates[0] : updates[0];
+            const targetGlassItem = targetAssignment?.glass_item_id;
+
+            // ✅ CRITICAL FIX: Create filtered order that ONLY includes what should be visible to printing team
+            const filteredUpdatedOrder = {
+                ...updatedOrder,
+                item_ids: updatedOrder.item_ids.map(item => {
+                    // ✅ FIXED: Only include printing assignments where the corresponding glass is completed
+                    const validPrintingAssignments = (item.team_assignments?.printing || []).filter(
+                        printingAssignment => {
+                            const printingGlassId = printingAssignment.glass_item_id?._id || printingAssignment.glass_item_id;
+                            
+                            // Find the corresponding glass assignment
+                            const correspondingGlassAssignment = (item.team_assignments?.glass || []).find(
+                                glassAssignment => {
+                                    const glassId = glassAssignment._id;
+                                    return glassId?.toString() === printingGlassId?.toString();
+                                }
+                            );
+
+                            // ✅ CRITICAL: Only include printing assignment if its glass is completed
+                            if (!correspondingGlassAssignment) {
+                                console.log('❌ No corresponding glass assignment found for printing assignment:', printingAssignment._id);
+                                return false;
+                            }
+
+                            const isGlassCompleted = correspondingGlassAssignment.team_tracking?.total_completed_qty >= correspondingGlassAssignment.quantity;
+                            
+                            if (!isGlassCompleted) {
+                                console.log('❌ Glass not completed for printing assignment:', {
+                                    printingId: printingAssignment._id,
+                                    glassId: correspondingGlassAssignment._id,
+                                    glassCompleted: correspondingGlassAssignment.team_tracking?.total_completed_qty || 0,
+                                    glassQuantity: correspondingGlassAssignment.quantity
+                                });
+                                return false;
+                            }
+
+                            console.log('✅ Glass completed, including printing assignment:', {
+                                printingId: printingAssignment._id,
+                                glassId: correspondingGlassAssignment._id
+                            });
+
+                            return true;
+                        }
+                    );
+
+                    // ✅ FIXED: Only include glass assignments that are completed (for decoration sequence)
+                    const completedGlassAssignments = (item.team_assignments?.glass || []).filter(
+                        glassAssignment => {
+                            const isCompleted = glassAssignment.team_tracking?.total_completed_qty >= glassAssignment.quantity;
+                            return isCompleted;
+                        }
+                    );
+
+                    return {
+                        ...item,
+                        team_assignments: {
+                            ...item.team_assignments,
+                            glass: completedGlassAssignments,
+                            printing: validPrintingAssignments
+                        }
+                    };
+                }).filter(item => {
+                    // ✅ FIXED: Only include items that have valid printing assignments
+                    const hasPrintingAssignments = item.team_assignments?.printing?.length > 0;
+                    return hasPrintingAssignments;
+                })
+            };
+
+            console.log('🔍 Filtered order check:', {
+                originalItemsCount: updatedOrder.item_ids.length,
+                filteredItemsCount: filteredUpdatedOrder.item_ids.length,
+                targetGlassItem,
+                hasCompletedWork
             });
 
-            if (response.data.success) {
-                const updatedOrder = response.data.data.order;
-                updateLocalStorageWithOrder(updatedOrder);
+            // ✅ FIXED: Always update localStorage with filtered order (only valid assignments)
+            updateOrderInLocalStorage(updatedOrder._id, filteredUpdatedOrder, TEAMS.PRINTING);
 
+            // ✅ FIXED: Only send notifications for completed work
+            if (notifyProgressUpdate && hasCompletedWork && targetGlassItem) {
+                console.log('📤 Notifying progress update:', {
+                    orderNumber: orderData.order_number,
+                    team: user.team,
+                    targetGlassItem
+                });
 
-                if (notifyProgressUpdate) {
-                    notifyProgressUpdate({
-                        orderNumber: orderData.order_number,
-                        itemName: itemData.name,
-                        team: user.team,
-                        updateSource: 'printing_update', // 🔥 ADD THIS LINE
-                        updates: updates.map(update => ({
-                            assignmentId: update.assignmentId,
-                            quantity: update.newEntry.quantity,
-                            notes: update.newEntry.notes,
-                            newTotalCompleted: update.newTotalCompleted,
-                            newStatus: update.newStatus
-                        })),
-                        updatedOrder: updatedOrder,
-                        customerName: orderData.customer_name,
-                        dispatcherName: orderData.dispatcher_name,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-
-                setSuccessMessage('Quantities updated successfully!');
-
-                setTimeout(() => {
-                    onUpdate?.(updatedOrder);
-                    onClose();
-                }, 1500);
-            } else {
-                throw new Error(response.data.message || 'Update failed');
-            }
-        } catch (err) {
-            console.error('Error updating quantities:', err);
-
-            let errorMessage = 'Failed to update quantities';
-
-            if (err.response?.data?.message) {
-                errorMessage = err.response.data.message;
-            } else if (err.message) {
-                errorMessage = err.message;
+                notifyProgressUpdate({
+                    orderNumber: orderData.order_number,
+                    itemName: itemData.name,
+                    team: user.team,
+                    updateSource: 'printing_update',
+                    targetGlassItem,
+                    hasCompletedWork,
+                    updates: updates.map(update => ({
+                        assignmentId: update.assignmentId,
+                        quantity: update.newEntry.quantity,
+                        notes: update.newEntry.notes,
+                        newTotalCompleted: update.newTotalCompleted,
+                        newStatus: update.newStatus,
+                        glass_item_id: update.glass_item_id,
+                        printing_name: update.printing_name
+                    })),
+                    updatedOrder: filteredUpdatedOrder,
+                    customerName: orderData.customer_name,
+                    dispatcherName: orderData.dispatcher_name,
+                    timestamp: new Date().toISOString()
+                });
             }
 
-            setError(errorMessage);
-        } finally {
-            setLoading(false);
+            console.log('✅ Update successful:', {
+                orderNumber: orderData.order_number,
+                team: user.team,
+                completedCount: completedUpdates.length,
+                targetGlassItem: targetGlassItem,
+                hasCompletedWork,
+                validPrintingAssignments: filteredUpdatedOrder.item_ids.reduce((count, item) => 
+                    count + (item.team_assignments?.printing?.length || 0), 0)
+            });
+
+            setSuccessMessage('Quantities updated successfully!');
+            setTimeout(() => {
+                onUpdate?.(filteredUpdatedOrder); // ✅ Pass filtered order to parent
+                onClose();
+            }, 1500);
+        } else {
+            throw new Error(response.data.message || 'Update failed');
         }
-    };
+    } catch (err) {
+        console.error('❌ Error updating quantities:', err);
+        setError(err?.response?.data?.message || err.message || 'Failed to update quantities');
+    } finally {
+        setLoading(false);
+    }
+};
 
     const ProgressBar = ({ assignment, todayQty }) => {
         const currentProgress = calculateProgress(assignment);

@@ -75,6 +75,13 @@ const DecoPrintOrders = ({ orderType }) => {
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
+        const targetGlassItem = orderData.targetGlassItem;
+
+        console.log('🔍 New order received:', {
+            orderNumber: newOrder.order_number,
+            targetGlassItem,
+            hasTargetGlass: !!targetGlassItem
+        });
 
         if (!hasprintingAssignments(newOrder)) {
             console.log('Order has no printing assignments, ignoring');
@@ -96,13 +103,13 @@ const DecoPrintOrders = ({ orderType }) => {
             if (existingOrderIndex >= 0) {
                 // Merge with existing order
                 const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, newOrder);
+                const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('Merged new order data:', newOrder.order_number);
+                console.log('✅ Merged new order data:', newOrder.order_number);
             } else {
                 updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
+                console.log('✅ Added new order:', newOrder.order_number);
             }
 
             saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
@@ -110,7 +117,15 @@ const DecoPrintOrders = ({ orderType }) => {
         });
     }, [orderType]);
 
+    // ✅ FIXED: Proper merge logic that handles both filtered and full orders
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
+        console.log('🔧 Merging orders:', {
+            existingOrderId: existingOrder._id,
+            newOrderId: newOrder._id,
+            targetGlassItem,
+            isFiltered: !!targetGlassItem
+        });
+
         const existingItemsMap = {};
         const newItemsMap = {};
 
@@ -124,20 +139,74 @@ const DecoPrintOrders = ({ orderType }) => {
 
         const mergedItems = [];
 
-        Object.values(existingItemsMap).forEach(existingItem => {
-            if (newItemsMap[existingItem._id]) {
-                const newItem = newItemsMap[existingItem._id];
-                const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
-                mergedItems.push(mergedItem);
-            } else {
-                mergedItems.push(existingItem);
-            }
-        });
+        if (targetGlassItem) {
+            // For filtered orders (from decoration sequence), add new assignments precisely
+            console.log('🎯 Processing filtered order for glass:', targetGlassItem);
 
-        Object.values(newItemsMap).forEach(newItem => {
-            if (!existingItemsMap[newItem._id]) {
-                mergedItems.push(newItem);
-            }
+            // First, process items from the new (filtered) order
+            Object.values(newItemsMap).forEach(newItem => {
+                if (existingItemsMap[newItem._id]) {
+                    // Merge existing item with new assignments for the target glass
+                    const existingItem = existingItemsMap[newItem._id];
+                    const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
+                    mergedItems.push(mergedItem);
+                    console.log('✅ Merged item:', newItem.name, 'for glass:', targetGlassItem);
+                } else {
+                    // New item, add as is
+                    mergedItems.push(newItem);
+                    console.log('✅ Added new item:', newItem.name);
+                }
+            });
+
+            // Then, preserve existing items that have assignments for OTHER glasses
+            Object.values(existingItemsMap).forEach(existingItem => {
+                if (!newItemsMap[existingItem._id]) {
+                    // Keep assignments for glasses OTHER than the target glass
+                    const otherGlassAssignments = (existingItem.team_assignments?.printing || [])
+                        .filter(assignment => {
+                            const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                            return assignmentGlassId?.toString() !== targetGlassItem?.toString();
+                        });
+
+                    if (otherGlassAssignments.length > 0) {
+                        mergedItems.push({
+                            ...existingItem,
+                            team_assignments: {
+                                ...existingItem.team_assignments,
+                                printing: otherGlassAssignments
+                            }
+                        });
+                        console.log('✅ Preserved item with other glass assignments:', existingItem.name);
+                    }
+                }
+            });
+        } else {
+            // For full order updates, use standard merge logic
+            console.log('🔄 Processing full order update');
+
+            // Process all existing items
+            Object.values(existingItemsMap).forEach(existingItem => {
+                if (newItemsMap[existingItem._id]) {
+                    const newItem = newItemsMap[existingItem._id];
+                    const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
+                    mergedItems.push(mergedItem);
+                } else {
+                    mergedItems.push(existingItem);
+                }
+            });
+
+            // Add any completely new items
+            Object.values(newItemsMap).forEach(newItem => {
+                if (!existingItemsMap[newItem._id]) {
+                    mergedItems.push(newItem);
+                }
+            });
+        }
+
+        console.log('🎯 Merge result:', {
+            totalItems: mergedItems.length,
+            itemNames: mergedItems.map(item => item.name),
+            targetGlassItem
         });
 
         return {
@@ -146,41 +215,94 @@ const DecoPrintOrders = ({ orderType }) => {
             item_ids: mergedItems
         };
     };
+
+    // ✅ FIXED: Assignment merging that properly handles targeted updates
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
         const existingAssignments = existingItem.team_assignments?.printing || [];
         const newAssignments = newItem.team_assignments?.printing || [];
 
-        const filteredNewAssignments = targetGlassItem
-            ? newAssignments.filter(a => a.glass_item_id === targetGlassItem)
-            : newAssignments;
+        console.log('🔧 Merging item assignments:', {
+            itemName: existingItem.name,
+            existingCount: existingAssignments.length,
+            newCount: newAssignments.length,
+            targetGlassItem
+        });
 
-        const keptOldAssignments = existingAssignments.filter(a =>
-            !filteredNewAssignments.some(n => n.glass_item_id === a.glass_item_id)
-        );
+        if (targetGlassItem) {
+            // For targeted updates, replace only assignments for the specific glass
+            const existingAssignmentsForOtherGlasses = existingAssignments.filter(assignment => {
+                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                return assignmentGlassId?.toString() !== targetGlassItem?.toString();
+            });
 
-        const mergedPrintingAssignments = [...keptOldAssignments, ...filteredNewAssignments];
+            const newAssignmentsForTargetGlass = newAssignments.filter(assignment => {
+                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
+                return assignmentGlassId?.toString() === targetGlassItem?.toString();
+            });
 
-        return {
-            ...existingItem,
-            ...newItem,
-            team_assignments: {
-                ...existingItem.team_assignments,
-                ...newItem.team_assignments,
-                printing: mergedPrintingAssignments
-            }
-        };
+            const mergedPrintingAssignments = [...existingAssignmentsForOtherGlasses, ...newAssignmentsForTargetGlass];
+
+            console.log('🎯 Targeted merge result:', {
+                keptOtherGlasses: existingAssignmentsForOtherGlasses.length,
+                addedTargetGlass: newAssignmentsForTargetGlass.length,
+                total: mergedPrintingAssignments.length
+            });
+
+            return {
+                ...existingItem,
+                ...newItem,
+                team_assignments: {
+                    ...existingItem.team_assignments,
+                    ...newItem.team_assignments,
+                    printing: mergedPrintingAssignments
+                }
+            };
+        } else {
+            // For full updates, replace assignments by glass ID
+            const keptAssignments = existingAssignments.filter(existingAssignment => {
+                const existingGlassId = existingAssignment.glass_item_id?._id || existingAssignment.glass_item_id;
+                return !newAssignments.some(newAssignment => {
+                    const newGlassId = newAssignment.glass_item_id?._id || newAssignment.glass_item_id;
+                    return newGlassId?.toString() === existingGlassId?.toString();
+                });
+            });
+
+            const mergedPrintingAssignments = [...keptAssignments, ...newAssignments];
+
+            console.log('🔄 Full merge result:', {
+                keptExisting: keptAssignments.length,
+                addedNew: newAssignments.length,
+                total: mergedPrintingAssignments.length
+            });
+
+            return {
+                ...existingItem,
+                ...newItem,
+                team_assignments: {
+                    ...existingItem.team_assignments,
+                    ...newItem.team_assignments,
+                    printing: mergedPrintingAssignments
+                }
+            };
+        }
     };
 
     const handleOrderUpdate = useCallback((updateData) => {
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
-        const { hasAssignments, wasRemoved, targetGlassItem } = updateData;
+        const targetGlassItem = updateData.targetGlassItem;
+
+        console.log('🔄 Order update received:', {
+            orderNumber: updatedOrder.order_number,
+            targetGlassItem,
+            wasRemoved: updateData.wasRemoved
+        });
 
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
 
-            if (wasRemoved || !hasAssignments || !hasprintingAssignments(updatedOrder)) {
-                console.log('Removing order from printing:', updatedOrder.order_number);
+            if (updateData.wasRemoved || !hasprintingAssignments(updatedOrder)) {
+                console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
                 if (existingOrderIndex >= 0) {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
                     saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
@@ -207,15 +329,16 @@ const DecoPrintOrders = ({ orderType }) => {
                 const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
+                console.log('✅ Updated existing order:', updatedOrder.order_number);
             } else {
                 updatedOrders = [updatedOrder, ...prevOrders];
+                console.log('✅ Added new order:', updatedOrder.order_number);
             }
 
             saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
             return updatedOrders;
         });
     }, [orderType]);
-
 
     const handleOrderDeleted = useCallback((deleteData) => {
         try {
