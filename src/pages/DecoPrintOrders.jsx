@@ -14,6 +14,7 @@ import {
 } from '../utils/localStorageUtils.jsx';
 import UpdatePrintQty from '../updateQuanityComponents/updatePrintQty.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
+import { mergeItemAssignmentsSafe } from '../utils/mergeItemsSafe.jsx';
 
 const DecoPrintOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
@@ -216,77 +217,10 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     };
 
-    // ✅ FIXED: Assignment merging that properly handles targeted updates
+
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
-        const existingAssignments = existingItem.team_assignments?.printing || [];
-        const newAssignments = newItem.team_assignments?.printing || [];
-
-        console.log('🔧 Merging item assignments:', {
-            itemName: existingItem.name,
-            existingCount: existingAssignments.length,
-            newCount: newAssignments.length,
-            targetGlassItem
-        });
-
-        if (targetGlassItem) {
-            // For targeted updates, replace only assignments for the specific glass
-            const existingAssignmentsForOtherGlasses = existingAssignments.filter(assignment => {
-                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
-                return assignmentGlassId?.toString() !== targetGlassItem?.toString();
-            });
-
-            const newAssignmentsForTargetGlass = newAssignments.filter(assignment => {
-                const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
-                return assignmentGlassId?.toString() === targetGlassItem?.toString();
-            });
-
-            const mergedPrintingAssignments = [...existingAssignmentsForOtherGlasses, ...newAssignmentsForTargetGlass];
-
-            console.log('🎯 Targeted merge result:', {
-                keptOtherGlasses: existingAssignmentsForOtherGlasses.length,
-                addedTargetGlass: newAssignmentsForTargetGlass.length,
-                total: mergedPrintingAssignments.length
-            });
-
-            return {
-                ...existingItem,
-                ...newItem,
-                team_assignments: {
-                    ...existingItem.team_assignments,
-                    ...newItem.team_assignments,
-                    printing: mergedPrintingAssignments
-                }
-            };
-        } else {
-            // For full updates, replace assignments by glass ID
-            const keptAssignments = existingAssignments.filter(existingAssignment => {
-                const existingGlassId = existingAssignment.glass_item_id?._id || existingAssignment.glass_item_id;
-                return !newAssignments.some(newAssignment => {
-                    const newGlassId = newAssignment.glass_item_id?._id || newAssignment.glass_item_id;
-                    return newGlassId?.toString() === existingGlassId?.toString();
-                });
-            });
-
-            const mergedPrintingAssignments = [...keptAssignments, ...newAssignments];
-
-            console.log('🔄 Full merge result:', {
-                keptExisting: keptAssignments.length,
-                addedNew: newAssignments.length,
-                total: mergedPrintingAssignments.length
-            });
-
-            return {
-                ...existingItem,
-                ...newItem,
-                team_assignments: {
-                    ...existingItem.team_assignments,
-                    ...newItem.team_assignments,
-                    printing: mergedPrintingAssignments
-                }
-            };
-        }
+        return mergeItemAssignmentsSafe(existingItem, newItem, 'printing', targetGlassItem);
     };
-
     const handleOrderUpdate = useCallback((updateData) => {
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
