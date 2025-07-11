@@ -9,6 +9,7 @@ import {
 } from '../utils/localStorageUtils';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
+import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
 
 const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
@@ -161,121 +162,101 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 updates
             });
 
-            if (response.data.success) {
-                const updatedOrder = response.data.data.order;
-                const completedUpdates = updates.filter(update => update.newStatus === 'Completed');
-                const hasCompletedWork = completedUpdates.length > 0;
-                const targetAssignment = completedUpdates.length > 0 ? completedUpdates[0] : updates[0];
+            if (!response.data.success) throw new Error(response.data.message || 'Update failed');
 
-                // ✅ Get the target glass item properly - it should be the glass_item_id from the assignment
-                const targetGlassItem = targetAssignment?.glass_item_id;
+            const updatedOrder = response.data.data.order;
+            const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
+            const hasCompletedWork = completedUpdates.length > 0;
+            const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
+            const targetGlassItem = targetAssignment?.glass_item_id;
 
-                const filteredUpdatedOrder = {
-                    ...updatedOrder,
-                    item_ids: updatedOrder.item_ids.map(item => {
-                        // ✅ Get glass assignments for THIS specific item, not just the current itemData
-                        const currentItemGlassAssignments = item.team_assignments?.glass || [];
+            const filteredUpdatedOrder = {
+                ...updatedOrder,
+                item_ids: updatedOrder.item_ids.map(item => {
+                    const glassAssignments = item.team_assignments?.glass || [];
 
-                        const validPrintingAssignments = (item.team_assignments?.printing || []).filter(
-                            printingAssignment => {
-                                const printingGlassId = printingAssignment.glass_item_id?._id || printingAssignment.glass_item_id;
+                    const completedGlass = glassAssignments.filter(g =>
+                        g.team_tracking?.total_completed_qty >= g.quantity
+                    );
 
-                                const correspondingGlassAssignment = currentItemGlassAssignments.find(
-                                    glassAssignment => {
-                                        const glassId = glassAssignment._id;
-                                        return glassId?.toString() === printingGlassId?.toString();
-                                    }
-                                );
-                                const isGlassCompleted = correspondingGlassAssignment?.team_tracking?.total_completed_qty >= correspondingGlassAssignment?.quantity;
-                                return isGlassCompleted;
-                            }
-                        ).map(printingAssignment =>
-                            // ✅ Use the current item's glass assignments, not the original one
-                            preserveGlassItemDetails(printingAssignment, currentItemGlassAssignments)
-                        );
+                    const validPrinting = (item.team_assignments?.printing || [])
+                        .filter(p => {
+                            const glassId = p.glass_item_id?._id || p.glass_item_id;
 
-                        const completedGlassAssignments = currentItemGlassAssignments.filter(
-                            glassAssignment => {
-                                const isCompleted = glassAssignment.team_tracking?.total_completed_qty >= glassAssignment.quantity;
-                                return isCompleted;
-                            }
-                        );
+                            const isGlassDone = glassAssignments.some(g =>
+                                g._id?.toString() === glassId?.toString() &&
+                                g.team_tracking?.total_completed_qty >= g.quantity
+                            );
 
-                        return {
-                            ...item,
-                            team_assignments: {
-                                ...item.team_assignments,
-                                glass: completedGlassAssignments,
-                                printing: validPrintingAssignments
-                            }
-                        };
-                    }).filter(item => {
-                        const hasPrintingAssignments = item.team_assignments?.printing?.length > 0;
-                        return hasPrintingAssignments;
-                    })
-                };
+                            const prevDone = isPreviousTeamsCompleted(item, 'printing', glassId);
 
-                // Update local storage with the filtered order
-                updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.PRINTING);
+                            return isGlassDone && prevDone;
+                        })
+                        .map(p => preserveGlassItemDetails(p, glassAssignments));
 
-                if (notifyProgressUpdate && hasCompletedWork && targetGlassItem) {
-                    // ✅ Extract the glass item ID properly for notification
-                    const targetGlassItemId = targetGlassItem?._id || targetGlassItem;
+                    return {
+                        ...item,
+                        team_assignments: {
+                            ...item.team_assignments,
+                            glass: completedGlass,
+                            printing: validPrinting
+                        }
+                    };
+                }).filter(item => item.team_assignments?.printing?.length > 0)
+            };
 
-                    console.log('📤 Notifying progress update:', {
-                        orderNumber: orderData.order_number,
-                        team: user.team,
-                        targetGlassItem: targetGlassItemId
-                    });
+            updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.PRINTING);
 
-                    notifyProgressUpdate({
-                        orderNumber: orderData.order_number,
-                        itemName: itemData.name,
-                        team: user.team,
-                        updateSource: 'printing_update',
-                        targetGlassItem: targetGlassItemId, // ✅ Pass the ID, not the full object
-                        hasCompletedWork,
-                        updates: updates.map(update => ({
-                            assignmentId: update.assignmentId,
-                            quantity: update.newEntry.quantity,
-                            notes: update.newEntry.notes,
-                            newTotalCompleted: update.newTotalCompleted,
-                            newStatus: update.newStatus,
-                            glass_item_id: update.glass_item_id,
-                            printing_name: update.printing_name
-                        })),
-                        updatedOrder: filteredUpdatedOrder, // ✅ Use filtered order with preserved glass details
-                        customerName: orderData.customer_name,
-                        dispatcherName: orderData.dispatcher_name,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-
-                console.log('✅ Update successful:', {
+            if (notifyProgressUpdate && hasCompletedWork && targetGlassItem) {
+                const glassItemId = targetGlassItem?._id || targetGlassItem;
+                notifyProgressUpdate({
                     orderNumber: orderData.order_number,
+                    itemName: itemData.name,
                     team: user.team,
-                    completedCount: completedUpdates.length,
-                    targetGlassItem: targetGlassItem,
+                    updateSource: 'printing_update',
+                    targetGlassItem: glassItemId,
                     hasCompletedWork,
-                    totalPrintingAssignments: filteredUpdatedOrder.item_ids.reduce((count, item) =>
-                        count + (item.team_assignments?.printing?.length || 0), 0)
+                    updates: updates.map(u => ({
+                        assignmentId: u.assignmentId,
+                        quantity: u.newEntry.quantity,
+                        notes: u.newEntry.notes,
+                        newTotalCompleted: u.newTotalCompleted,
+                        newStatus: u.newStatus,
+                        glass_item_id: u.glass_item_id,
+                        printing_name: u.printing_name
+                    })),
+                    updatedOrder: filteredUpdatedOrder,
+                    customerName: orderData.customer_name,
+                    dispatcherName: orderData.dispatcher_name,
+                    timestamp: new Date().toISOString()
                 });
-
-                setSuccessMessage('Quantities updated successfully!');
-                setTimeout(() => {
-                    onUpdate?.(filteredUpdatedOrder); 
-                    onClose();
-                }, 1500);
-            } else {
-                throw new Error(response.data.message || 'Update failed');
             }
+
+            console.log('✅ Printing update successful:', {
+                orderNumber: orderData.order_number,
+                team: user.team,
+                completedCount: completedUpdates.length,
+                targetGlassItem: targetGlassItem,
+                hasCompletedWork,
+                totalPrintingAssignments: filteredUpdatedOrder.item_ids.reduce(
+                    (count, item) => count + (item.team_assignments?.printing?.length || 0),
+                    0
+                )
+            });
+
+            setSuccessMessage('Printing quantities updated!');
+            setTimeout(() => {
+                onUpdate?.(filteredUpdatedOrder);
+                onClose();
+            }, 1500);
         } catch (err) {
-            console.error('❌ Error updating quantities:', err);
-            setError(err?.response?.data?.message || err.message || 'Failed to update quantities');
+            console.error('❌ Error in printing save:', err);
+            setError(err?.response?.data?.message || err.message || 'Failed to update printing');
         } finally {
             setLoading(false);
         }
     };
+
 
 
 

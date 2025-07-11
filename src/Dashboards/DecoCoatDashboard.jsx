@@ -10,6 +10,7 @@ import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 
 import TeamOrders from '../pages/TeamOrders.jsx';
+import DecoCoatOrders from '../pages/DecoCoatOrders.jsx';
 
 const DecoCoatDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -149,9 +150,9 @@ const DecoCoatDashbaord = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <TeamOrders orderType="pending" />
+             <DecoCoatOrders orderType="pending" />
             ) : (
-             <TeamOrders orderType="completed"/>
+             <DecoCoatOrders orderType="completed"/>
             )}
           </div>
         </main>
