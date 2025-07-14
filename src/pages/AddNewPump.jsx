@@ -1,102 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-
 import AddNewPumpChild from '../child/AddNewPumpChild.jsx';
+import { useSocket } from '../context/SocketContext'; // Updated import
 
 const AddNewPump = () => {
-  const [bottles, setBottles] = useState([]);
   const [filteredBottles, setFilteredBottles] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBottle, setEditingBottle] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    neck: ""
-  });
+  // Get everything from context
+  const {
+    loading,
+    createItem,
+    updateItem,
+    deleteItem,
+    loadItems,
+    getItemsByType
+  } = useSocket();
 
+  const ITEM_TYPE = 'pumps'; // Note: using plural as per your dataStore
+  const rawBottles = getItemsByType(ITEM_TYPE);
+  
+  // Ensure bottles is always an array
+  const bottles = Array.isArray(rawBottles) ? rawBottles : [];
 
-
-  // const API_BASE = 'http://localhost:5000/api/pumpdata';
-  const API_BASE = 'https://pg-backend-o05l.onrender.com/api/pumpdata';
-
-  const fetchBottles = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE}`);
-      if (!response.ok) throw new Error('Failed to fetch bottles');
-      const data = await response.json();
-      setBottles(data);
-      setFilteredBottles(data);
-    } catch (err) {
-      setError('Failed to fetch bottles');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createBottle = async (bottleData) => {
-    try {
-      const response = await fetch(`${API_BASE}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bottleData)
-      });
-      if (!response.ok) throw new Error('Failed to create bottle');
-      const newBottle = await response.json();
-
-      const updatedBottles = [newBottle, ...bottles];
-      setBottles(updatedBottles);
-      setFilteredBottles(updatedBottles);
-      return newBottle;
-    } catch (err) {
-      throw new Error('Failed to create bottle');
-    }
-  };
-
-  const updateBottle = async (id, bottleData) => {
-    try {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bottleData)
-      });
-      if (!response.ok) throw new Error('Failed to update bottle');
-      const updatedBottle = await response.json();
-
-      const updatedBottles = bottles.map(bottle =>
-        bottle._id === id ? updatedBottle : bottle
-      );
-      setBottles(updatedBottles);
-      setFilteredBottles(updatedBottles);
-      return updatedBottle;
-    } catch (err) {
-      throw new Error('Failed to update bottle');
-    }
-  };
-
-  const deleteBottle = async (id) => {
-    try {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to delete bottle');
-
-      const updatedBottles = bottles.filter(bottle => bottle._id !== id);
-      setBottles(updatedBottles);
-      setFilteredBottles(updatedBottles);
-    } catch (err) {
-      throw new Error('Failed to delete bottle');
-    }
-  };
-
+  // Filter bottles based on search term
   const debounceSearch = useCallback(
     debounce((term) => {
+      if (!Array.isArray(bottles)) {
+        console.warn('bottles is not an array:', bottles);
+        setFilteredBottles([]);
+        return;
+      }
+      
       const filtered = bottles.filter(bottle =>
         Object.values(bottle).some(value =>
           value?.toString().toLowerCase().includes(term.toLowerCase())
@@ -112,14 +52,30 @@ const AddNewPump = () => {
     debounceSearch(searchTerm);
   }, [searchTerm, debounceSearch]);
 
+  // Load pump data on component mount only if not already loaded
   useEffect(() => {
-    fetchBottles();
+    if (bottles.length === 0) {
+      loadItems(ITEM_TYPE);
+    }
   }, []);
 
-  const totalPages = Math.ceil(filteredBottles.length / itemsPerPage);
+  // Update filtered bottles when bottles change
+  useEffect(() => {
+    if (Array.isArray(bottles)) {
+      setFilteredBottles(bottles);
+    } else {
+      console.warn('bottles is not an array, setting empty array:', bottles);
+      setFilteredBottles([]);
+    }
+  }, [bottles]);
+
+  // Ensure filteredBottles is always an array before using array methods
+  const safeFilteredBottles = Array.isArray(filteredBottles) ? filteredBottles : [];
+  
+  const totalPages = Math.ceil(safeFilteredBottles.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentBottles = filteredBottles.slice(startIndex, endIndex);
+  const currentBottles = safeFilteredBottles.slice(startIndex, endIndex);
 
   const handleItemsPerPageChange = (newItemsPerPage) => {
     setItemsPerPage(newItemsPerPage);
@@ -127,19 +83,19 @@ const AddNewPump = () => {
   };
 
   const handleSubmit = async (formData) => {
-    if (!formData.FORMULA.trim()) {
-      throw new Error('Formula is required');
+    if (!formData.name.trim()) {
+      throw new Error('Name is required');
     }
 
     try {
       if (editingBottle) {
-        await updateBottle(editingBottle._id, formData);
+        await updateItem(ITEM_TYPE, editingBottle._id, formData);
         setEditingBottle(null);
       } else {
-        await createBottle(formData);
+        await createItem(ITEM_TYPE, formData);
       }
       setShowAddForm(false);
-      return true; // Success
+      return true;
     } catch (err) {
       throw new Error(err.message);
     }
@@ -148,12 +104,12 @@ const AddNewPump = () => {
   const handleEdit = (bottle) => {
     setEditingBottle(bottle);
     setShowAddForm(true);
-  }
+  };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this bottle?')) {
+    if (window.confirm('Are you sure you want to delete this pump?')) {
       try {
-        await deleteBottle(id);
+        await deleteItem(ITEM_TYPE, id);
       } catch (err) {
         setError(err.message);
       }
@@ -163,7 +119,7 @@ const AddNewPump = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-sm">Loading bottles...</div>
+        <div className="text-sm">Loading pumps...</div>
       </div>
     );
   }
@@ -175,17 +131,10 @@ const AddNewPump = () => {
           onClick={() => {
             setShowAddForm(true);
             setEditingBottle(null);
-            setFormData({
-              name: "",
-              neck: ""
-            });
           }}
           className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
         >
-          <Plus size={16} onClick={() => {
-            setShowAddForm(true);
-            setEditingBottle(null);
-          }} />
+          <Plus size={16} />
           New Pump
         </button>
 
@@ -201,25 +150,20 @@ const AddNewPump = () => {
         </div>
       </div>
 
-
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm flex-shrink-0">
           {error}
         </div>
       )}
 
-
       <div className="bg-white rounded-full shadow-lg flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-auto rounded-lg">
           <table className="w-full min-w-full rounded-full">
             <thead className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] text-center font-bold text-sm text-white sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-3 text-left text-sm font-medium">Name </th>
-                <th className="px-2 py-3 text-left text-sm font-medium">Neck</th>
-
+                <th className="px-2 py-3 text-left text-sm font-medium">Pump Name</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Edit</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Delete</th>
-
               </tr>
             </thead>
             <tbody>
@@ -231,8 +175,6 @@ const AddNewPump = () => {
                 return (
                   <tr key={bottle._id} className={rowBgColor}>
                     <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.name || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.neck}</td>
-
                     <td className="px-2 py-3">
                       <button
                         onClick={() => handleEdit(bottle)}
@@ -242,7 +184,6 @@ const AddNewPump = () => {
                         <Edit size={14} />
                       </button>
                     </td>
-
                     <td className="px-2 py-3">
                       <button
                         onClick={() => handleDelete(bottle._id)}
@@ -260,12 +201,12 @@ const AddNewPump = () => {
 
           {currentBottles.length === 0 && (
             <div className="text-center py-8 text-gray-500 text-sm">
-              No bottles found
+              No pumps found
             </div>
           )}
         </div>
 
-        <div className="flex justify-between items-center p-4 mt-18 border-t border-orange-400  bg-white text-sm flex-shrink-0">
+        <div className="flex justify-between items-center p-4 mt-18 border-t border-orange-400 bg-white text-sm flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-gray-600">Page {currentPage} of {totalPages}</span>
             <span className="text-gray-600">Show</span>
@@ -291,7 +232,6 @@ const AddNewPump = () => {
               >
                 «
               </button>
-
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
@@ -300,11 +240,9 @@ const AddNewPump = () => {
               >
                 <ChevronLeft size={16} />
               </button>
-
               <span className="text-gray-700 px-2 text-sm">
                 {currentPage}
               </span>
-
               <button
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                 disabled={currentPage === totalPages}
@@ -313,7 +251,6 @@ const AddNewPump = () => {
               >
                 <ChevronRight size={16} />
               </button>
-
               <button
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={currentPage === totalPages}

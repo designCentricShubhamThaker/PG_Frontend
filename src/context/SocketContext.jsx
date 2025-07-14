@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import axios from 'axios';
 import { useAuth } from './useAuth.jsx';
 
 const SocketContext = createContext(null);
@@ -11,6 +12,298 @@ export const SocketProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
     const [connectedUsers, setConnectedUsers] = useState({ dispatchers: [], teamMembers: [] });
+    const [loading, setLoading] = useState(false);
+    const [dataStore, setDataStore] = useState({
+        pumps: [],
+        caps: [],
+        glass: [],
+        accessories: [],
+    });
+
+    // Load data from localStorage on initialization
+    useEffect(() => {
+        const loadDataFromStorage = () => {
+            const typeMapping = {
+                pumps: 'pumpdata',
+                caps: 'capdata', 
+                glass: 'bottledata',
+                accessories: 'accessories'
+            };
+
+            const cachedData = {};
+            Object.entries(typeMapping).forEach(([key, storageKey]) => {
+                const stored = localStorage.getItem(`${storageKey}`);
+                if (stored) {
+                    try {
+                        cachedData[key] = JSON.parse(stored);
+                        console.log(`📦 Loaded ${key} from localStorage:`, cachedData[key].length, 'items');
+                    } catch (error) {
+                        console.error(`❌ Error parsing ${key} from localStorage:`, error);
+                        cachedData[key] = [];
+                    }
+                } else {
+                    cachedData[key] = [];
+                }
+            });
+            
+            setDataStore(cachedData);
+        };
+
+        loadDataFromStorage();
+    }, []);
+
+    // 🌐 Fetch from API only if no data exists
+    const fetchInitialData = async () => {
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        try {
+            const fetchPromises = Object.entries(typeMapping).map(async ([key, endpoint]) => {
+                // Skip if we already have data
+                if (dataStore[key] && dataStore[key].length > 0) {
+                    console.log(`⏭️ Skipping ${key} - already loaded (${dataStore[key].length} items)`);
+                    return { key, data: dataStore[key] };
+                }
+
+                console.log(`🔄 Fetching ${key} from API...`);
+                const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+                const data = response.data;
+                
+                // Save to localStorage
+                localStorage.setItem(`${endpoint}`, JSON.stringify(data));
+                console.log(`✅ Fetched and saved ${key}:`, data.length, 'items');
+                
+                return { key, data };
+            });
+
+            const results = await Promise.all(fetchPromises);
+            
+            // Update dataStore with new data
+            const newDataStore = { ...dataStore };
+            results.forEach(({ key, data }) => {
+                newDataStore[key] = data;
+            });
+            
+            setDataStore(newDataStore);
+            console.log('✅ All data synchronized');
+            
+        } catch (err) {
+            console.error('❌ Failed to fetch initial data:', err);
+        }
+    };
+
+    // 🔄 Update store + localStorage on socket updates
+    const updateItemInStore = (type, item, action) => {
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        const storageKey = typeMapping[type];
+        if (!storageKey) {
+            console.error(`❌ Unknown type: ${type}`);
+            return;
+        }
+
+        setDataStore(prev => {
+            const existing = prev[type] || [];
+            let updated = [];
+
+            if (action === 'create') {
+                updated = existing.some(i => i._id === item._id) ? existing : [item, ...existing];
+            } else if (action === 'update') {
+                updated = existing.map(i => (i._id === item._id ? item : i));
+            } else if (action === 'delete') {
+                updated = existing.filter(i => i._id !== item._id);
+            }
+
+            localStorage.setItem(`${storageKey}`, JSON.stringify(updated));
+            console.log(`🔄 Updated ${type} in store and localStorage`);
+            return { ...prev, [type]: updated };
+        });
+    };
+
+    const createItem = useCallback(async (type, data) => {
+        if (!socket || !socket.connected) {
+            throw new Error('Socket not connected');
+        }
+
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        const endpoint = typeMapping[type];
+        if (!endpoint) {
+            throw new Error(`Unknown type: ${type}`);
+        }
+
+        try {
+            setLoading(true);
+            const response = await axios.post(`http://localhost:5000/api/${endpoint}`, data);
+            const newItem = response.data;
+            updateItemInStore(type, newItem, 'create');
+            socket.emit('item-created', { type, item: newItem });
+            console.log(`✅ Created ${type}:`, newItem.name || newItem._id);
+            return newItem;
+        } catch (error) {
+            console.error(`❌ Error creating ${type}:`, error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [socket]);
+
+    const updateItem = useCallback(async (type, id, data) => {
+        if (!socket || !socket.connected) {
+            throw new Error('Socket not connected');
+        }
+
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        const endpoint = typeMapping[type];
+        if (!endpoint) {
+            throw new Error(`Unknown type: ${type}`);
+        }
+
+        try {
+            setLoading(true);
+            const response = await axios.put(`http://localhost:5000/api/${endpoint}/${id}`, data);
+            const updatedItem = response.data;
+
+            // Update local store immediately
+            updateItemInStore(type, updatedItem, 'update');
+
+            // Emit socket event
+            socket.emit('item-updated', { type, item: updatedItem });
+
+            console.log(`✅ Updated ${type}:`, updatedItem.name || updatedItem._id);
+            return updatedItem;
+        } catch (error) {
+            console.error(`❌ Error updating ${type}:`, error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [socket]);
+
+    const deleteItem = useCallback(async (type, id) => {
+        if (!socket || !socket.connected) {
+            throw new Error('Socket not connected');
+        }
+
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        const endpoint = typeMapping[type];
+        if (!endpoint) {
+            throw new Error(`Unknown type: ${type}`);
+        }
+
+        try {
+            setLoading(true);
+            await axios.delete(`http://localhost:5000/api/${endpoint}/${id}`);
+
+            // Update local store immediately
+            updateItemInStore(type, { _id: id }, 'delete');
+
+            // Emit socket event
+            socket.emit('item-deleted', { type, item: { _id: id } });
+
+            console.log(`✅ Deleted ${type}:`, id);
+            return true;
+        } catch (error) {
+            console.error(`❌ Error deleting ${type}:`, error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [socket]);
+
+    const loadItems = useCallback(async (type) => {
+        try {
+            // Check if we already have data in store
+            if (dataStore[type] && dataStore[type].length > 0) {
+                console.log(`📦 Using cached ${type} data (${dataStore[type].length} items)`);
+                return dataStore[type];
+            }
+
+            setLoading(true);
+            
+            const typeMapping = {
+                pumps: 'pumpdata',
+                caps: 'capdata', 
+                glass: 'bottledata',
+                accessories: 'accessories'
+            };
+
+            const endpoint = typeMapping[type];
+            if (!endpoint) {
+                throw new Error(`Unknown type: ${type}`);
+            }
+
+            // Fetch from API
+            console.log(`🔄 Loading ${type} from API...`);
+            const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+            const items = response.data;
+
+            // Update store and localStorage
+            setDataStore(prev => ({ ...prev, [type]: items }));
+            localStorage.setItem(`${endpoint}`, JSON.stringify(items));
+
+            console.log(`✅ Loaded ${type} from API (${items.length} items)`);
+            return items;
+        } catch (error) {
+            console.error(`❌ Error loading ${type}:`, error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    }, [dataStore]);
+
+    const getItemsByType = useCallback((type) => {
+        return dataStore[type] || [];
+    }, [dataStore]);
+
+    // Clear cache function (useful for development or forced refresh)
+    const clearCache = useCallback(() => {
+        const typeMapping = {
+            pumps: 'pumpdata',
+            caps: 'capdata', 
+            glass: 'bottledata',
+            accessories: 'accessories'
+        };
+
+        Object.values(typeMapping).forEach(key => {
+            localStorage.removeItem(`${key}`);
+        });
+        
+        setDataStore({
+            pumps: [],
+            caps: [],
+            glass: [],
+            accessories: [],
+        });
+        
+        console.log('🧹 Cache cleared');
+    }, []);
 
     useEffect(() => {
         if (!user || !user.role) return;
@@ -29,6 +322,8 @@ export const SocketProvider = ({ children }) => {
             console.log('🔌 Socket connected');
             setIsConnected(true);
             registerUser(socketInstance);
+            // Only fetch data that's not already cached
+            fetchInitialData();
         });
 
         socketInstance.on('disconnect', () => {
@@ -55,10 +350,13 @@ export const SocketProvider = ({ children }) => {
             console.log('📈 Progress update received in SocketProvider:', progressData);
         });
 
-        // NEW: Sequential decoration event listener
         socketInstance.on('decoration-order-ready', (decorationData) => {
             console.log('🎨 Decoration order ready received:', decorationData);
-            // This will be handled by individual team components
+        });
+
+        socketInstance.on('item-data-updated', ({ type, item, action }) => {
+            console.log(`📦 [${type}] - ${action.toUpperCase()}:`, item.name || item._id);
+            updateItemInStore(type, item, action);
         });
 
         setSocket(socketInstance);
@@ -78,7 +376,6 @@ export const SocketProvider = ({ children }) => {
         };
 
         console.log('🔄 Registering user:', registrationData);
-
         socketInstance.emit('register', registrationData);
     }, [user]);
 
@@ -179,6 +476,7 @@ export const SocketProvider = ({ children }) => {
             return false;
         }
     }, [socket]);
+
     const notifyProgressUpdate = useCallback((progressData) => {
         if (!socket || !socket.connected || !progressData) {
             console.warn('⚠️ Cannot send progress notification - socket not connected or no data');
@@ -208,31 +506,14 @@ export const SocketProvider = ({ children }) => {
                 updateSource: progressData.updateSource
             };
 
-            console.log('📊 Final progress notification data:', {
-                orderNumber: notificationData.orderNumber,
-                team: notificationData.team,
-                targetGlassItem: notificationData.targetGlassItem,
-                hasCompletedWork: notificationData.hasCompletedWork,
-                hasUpdatedOrder: !!notificationData.updatedOrder,
-                updatesCount: notificationData.updates?.length || 0
-            });
-
             socket.emit('team-progress-updated', notificationData);
-
-            console.log('✅ Progress update notification sent successfully:', {
-                order: progressData.orderNumber,
-                team: progressData.team,
-                targetGlass: progressData.targetGlassItem,
-                item: progressData.itemName
-            });
-
+            console.log('✅ Progress update notification sent successfully');
             return true;
         } catch (error) {
             console.error('❌ Error sending progress notification:', error);
             return false;
         }
     }, [socket]);
-
 
     const notifyOrderDelete = useCallback((deleteData) => {
         if (!socket || !socket.connected || !deleteData) {
@@ -275,6 +556,16 @@ export const SocketProvider = ({ children }) => {
         socket,
         isConnected,
         connectedUsers,
+        loading,
+        dataStore,
+        // CRUD methods
+        createItem,
+        updateItem,
+        deleteItem,
+        loadItems,
+        getItemsByType,
+        clearCache, 
+
         notifyTeam,
         notifyOrderEdit,
         notifyProgressUpdate,
@@ -283,6 +574,3 @@ export const SocketProvider = ({ children }) => {
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;
 };
-
-
-

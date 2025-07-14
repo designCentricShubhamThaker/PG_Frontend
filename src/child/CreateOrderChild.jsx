@@ -4,9 +4,9 @@ import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
 import { CapData } from '../data/CapData.js';
-import { glassData } from '../data/GlassData.js';
+// import { glassData } from '../data/GlassData.js';
 import { boxData } from "../data/boxData.js"
-import { pumpData } from "../data/pumpData.js"
+// import { pumpData } from "../data/pumpData.js"
 import { addOrderToLocalStorage } from '../utils/localStorageUtils.jsx';
 import { resetForm } from '../utils/resetForm.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -14,16 +14,23 @@ import { handleDuplicateOrder } from '../utils/orderHelpers.jsx';
 import { handleSubmitOrder } from '../utils/orderSubmit.jsx';
 
 const CreateOrderChild = ({ onClose, onCreateOrder }) => {
+
+  const { notifyTeam, isConnected, getItemsByType, loadItems } = useSocket();
+
+  const caps = getItemsByType('caps');
+  const pumps = getItemsByType('pumps');
+  const glass = getItemsByType('glass');
+  const accessories = getItemsByType('accessories');
   const [orderNumber, setOrderNumber] = useState("");
   const [dispatcherName, setDispatcherName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [error, setError] = useState("");
   const dispatchers = ["Rajesh Kumar", "Anita Sharma"];
 
-  const [filteredGlassData, setFilteredGlassData] = useState(glassData);
+  const [filteredGlassData, setFilteredGlassData] = useState(glass);
   const [filteredCapData, setFilteredCapData] = useState(CapData);
   const [filteredBoxData, setFilteredBoxData] = useState(boxData);
-  const [filteredPumpData, setFilteredPumpData] = useState(pumpData);
+  const [filteredPumpData, setFilteredPumpData] = useState(pumps);
 
   const [glassSearches, setGlassSearches] = useState({});
   const [capSearches, setCapSearches] = useState({});
@@ -34,6 +41,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const [duplicateOrderNumber, setDuplicateOrderNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [duplicateError, setDuplicateError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+
+
   const customers = ["Amit Verma", "Priya Patel", "Rohan Singh", "Neha Gupta", "Vikram Iyer", "Sunita Nair", "Arjun Malhotra", "Deepa Joshi"];
   const DECORATION_COMBINATIONS = [
     { key: 'coating', label: 'COATING' },
@@ -57,6 +68,13 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     GBP: 0
   });
   const [isLoadingRates, setIsLoadingRates] = useState(false);
+
+  useEffect(() => {
+    if (pumps.length === 0) loadItems('pumps');
+    if (caps.length === 0) loadItems('caps');
+    if (glass.length === 0) loadItems('glass');
+    if (accessories.length === 0) loadItems('accessories');
+  }, []);
 
   const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setBoxSearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
 
@@ -129,9 +147,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     }
   ]);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { notifyTeam, isConnected } = useSocket();
 
   const fetchExchangeRates = async () => {
     setIsLoadingRates(true);
@@ -633,24 +649,24 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                           </div>
 
                           <div className="space-y-6">
-                            {item.teamAssignments.glass.map((glass, glassIndex) => (
+                            {item.teamAssignments.glass.map((glassItem, glassIndex) => (
                               <div
                                 key={`glass-${itemIndex}-${glassIndex}`}
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4 items-end">
-                                  {/* Glass Name - Reduced space */}
+                                  {/* Glass Name */}
                                   <div className="col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Glass Name</label>
                                     <div className="relative">
                                       <input
                                         type="text"
                                         value={glassSearches[`${itemIndex}-${glassIndex}`] || ""}
-                                        placeholder={glass.glass_name !== "N/A" ? glass.glass_name : "Please Select"}
+                                        placeholder={glassItem.glass_name !== "N/A" ? glassItem.glass_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`glass-${itemIndex}-${glassIndex}`);
                                           setFilteredGlassData(
-                                            glassData.filter(g => g.FORMULA !== "N/A")
+                                            glass.filter(g => g.FORMULA !== "N/A")
                                           );
                                         }}
                                         onChange={(e) => {
@@ -660,15 +676,15 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setGlassSearches(newSearches);
 
                                           const searchTerm = searchValue.toLowerCase();
-                                          const filtered = glassData.filter(g =>
+                                          const filtered = glass.filter(g =>
                                             (g.FORMULA !== "N/A" || searchTerm === "n/a") &&
                                             g.FORMULA.toLowerCase().includes(searchTerm)
                                           );
                                           setFilteredGlassData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                placeholder:text-gray-400 z-50"
+                  focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                  placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -683,23 +699,23 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                       {isDropdownVisible === `glass-${itemIndex}-${glassIndex}` && (
                                         <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
                                           {filteredGlassData.length > 0 ? (
-                                            filteredGlassData.map((glassItem, idx) => (
+                                            filteredGlassData.map((glassDataItem, idx) => (
                                               <div
                                                 key={idx}
                                                 className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
                                                 onClick={() => {
                                                   const newSearches = { ...glassSearches };
-                                                  newSearches[`${itemIndex}-${glassIndex}`] = glassItem.FORMULA;
+                                                  newSearches[`${itemIndex}-${glassIndex}`] = glassDataItem.FORMULA;
                                                   setGlassSearches(newSearches);
 
-                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'glass_name', glassItem.FORMULA);
-                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'neck_size', glassItem.NECK_DIAM);
-                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'weight', glassItem.ML);
+                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'glass_name', glassDataItem.FORMULA);
+                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'neck_size', glassDataItem.NECK_DIAM);
+                                                  handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'weight', glassDataItem.ML);
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
                                                 <span className="text-orange-700 font-medium">
-                                                  {glassItem.FORMULA === "N/A" ? "Please Select" : glassItem.FORMULA}
+                                                  {glassDataItem.FORMULA === "N/A" ? "Please Select" : glassDataItem.FORMULA}
                                                 </span>
                                               </div>
                                             ))
@@ -716,7 +732,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Weight</label>
                                     <input
                                       type="text"
-                                      value={glass.weight || ""}
+                                      value={glassItem.weight || ""}
                                       className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium text-center"
                                       readOnly
                                     />
@@ -727,23 +743,23 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
                                     <input
                                       type="text"
-                                      value={glass.neck_size || ""}
+                                      value={glassItem.neck_size || ""}
                                       className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium text-center"
                                       readOnly
                                     />
                                   </div>
 
-                                  {/* Decoration - Reduced space */}
+                                  {/* Decoration */}
                                   <div className="col-span-2">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Decoration</label>
                                     <div className="relative">
                                       <select
-                                        value={glass.decoration || "N/A"}
+                                        value={glassItem.decoration || "N/A"}
                                         onChange={(e) =>
                                           handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration', e.target.value)
                                         }
                                         className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-  focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                  focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                       >
                                         <option value="N/A">Please Select</option>
                                         {DECORATION_COMBINATIONS.map((combo) => (
@@ -752,7 +768,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           </option>
                                         ))}
                                       </select>
-
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
                                         className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
@@ -764,44 +779,48 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                       </svg>
                                     </div>
                                   </div>
+
+                                  {/* Deco No */}
                                   <div className="col-span-1">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Deco No</label>
                                     <input
                                       type="text"
-                                      value={glass.decoration_no || ""}
+                                      value={glassItem.decoration_no || ""}
                                       onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration_no', e.target.value)}
                                       className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     />
                                   </div>
 
+                                  {/* Quantity */}
                                   <div className="col-span-2">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                     <input
                                       type="number"
-                                      value={glass.quantity || ""}
+                                      value={glassItem.quantity || ""}
                                       onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'quantity', e.target.value)}
                                       className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent "
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                       min="1"
                                     />
                                   </div>
 
-
+                                  {/* Rate */}
                                   <div className="col-span-1.5">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
                                     <input
                                       type="number"
-                                      value={glass.rate || ""}
+                                      value={glassItem.rate || ""}
                                       onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'rate', e.target.value)}
                                       className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent "
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                       min="0"
                                       step="0.01"
                                     />
                                   </div>
                                 </div>
 
+                                {/* Add / Remove Buttons */}
                                 <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
                                   <button
                                     type="button"
@@ -826,6 +845,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                             ))}
                           </div>
                         </div>
+
 
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200">
                           <div className="flex items-center mb-4">
@@ -1198,7 +1218,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         placeholder={pump.pump_name !== "N/A" ? pump.pump_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`pump-${itemIndex}-${pumpIndex}`);
-                                          setFilteredPumpData(pumpData.filter(p => p.pump_name !== "N/A"));
+                                          // Use the correct property from your socket context data
+                                          setFilteredPumpData(pumps.filter(p => p.name !== "N/A"));
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -1207,9 +1228,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setPumpSearches(newSearches);
 
                                           const searchTerm = searchValue.toLowerCase();
-                                          const filtered = pumpData.filter(p =>
-                                            (p.pump_name !== "N/A" || searchTerm === "n/a") &&
-                                            p.pump_name.toLowerCase().includes(searchTerm)
+                                          // Filter using the correct property (name, not pump_name)
+                                          const filtered = pumps.filter(p =>
+                                            (p.name !== "N/A" || searchTerm === "n/a") &&
+                                            p.name.toLowerCase().includes(searchTerm)
                                           );
                                           setFilteredPumpData(filtered);
                                         }}
@@ -1227,15 +1249,20 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                 key={idx}
                                                 className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
                                                 onClick={() => {
+                                                  // Set the search input to show the selected pump name
                                                   const newSearches = { ...pumpSearches };
-                                                  newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.pump_name;
+                                                  newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.name;
                                                   setPumpSearches(newSearches);
-                                                  handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.pump_name);
+
+                                                  // Update the team assignment with the pump name
+                                                  handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.name);
+
+                                                  // Close the dropdown
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
                                                 <span className="text-orange-700 font-medium">
-                                                  {pumpItem.pump_name === "N/A" ? "Please Select" : pumpItem.pump_name}
+                                                  {pumpItem.name === "N/A" ? "Please Select" : pumpItem.name}
                                                 </span>
                                               </div>
                                             ))
