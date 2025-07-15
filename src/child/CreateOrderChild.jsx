@@ -3,15 +3,15 @@ import { Plus, Minus, Trash } from 'lucide-react';
 import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
-import { CapData } from '../data/CapData.js';
-// import { glassData } from '../data/GlassData.js';
+
 import { boxData } from "../data/boxData.js"
-// import { pumpData } from "../data/pumpData.js"
+
 import { addOrderToLocalStorage } from '../utils/localStorageUtils.jsx';
 import { resetForm } from '../utils/resetForm.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { handleDuplicateOrder } from '../utils/orderHelpers.jsx';
 import { handleSubmitOrder } from '../utils/orderSubmit.jsx';
+import EnhancedPriceDisplay from '../components/EnhancedPriiceDisplay.jsx';
 
 const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
@@ -28,23 +28,22 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const dispatchers = ["Rajesh Kumar", "Anita Sharma"];
 
   const [filteredGlassData, setFilteredGlassData] = useState(glass);
-  const [filteredCapData, setFilteredCapData] = useState(CapData);
+  const [filteredCapData, setFilteredCapData] = useState(caps);
   const [filteredBoxData, setFilteredBoxData] = useState(boxData);
   const [filteredPumpData, setFilteredPumpData] = useState(pumps);
+  const [filteredAccessoryData, setFilteredAccessoryData] = useState(accessories);
 
   const [glassSearches, setGlassSearches] = useState({});
   const [capSearches, setCapSearches] = useState({});
   const [boxSearches, setBoxSearches] = useState({});
   const [pumpSearches, setPumpSearches] = useState({});
+  const [accessorySearches, setAccessorySearches] = useState({});
   const [isDropdownVisible, setIsDropdownVisible] = useState(null);
   const [showDuplicateSection, setShowDuplicateSection] = useState(false);
   const [duplicateOrderNumber, setDuplicateOrderNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [duplicateError, setDuplicateError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-
-
   const customers = ["Amit Verma", "Priya Patel", "Rohan Singh", "Neha Gupta", "Vikram Iyer", "Sunita Nair", "Arjun Malhotra", "Deepa Joshi"];
   const DECORATION_COMBINATIONS = [
     { key: 'coating', label: 'COATING' },
@@ -58,9 +57,9 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     { key: 'frosting_printing', label: 'FROSTING + PRINTING' },
     { key: 'frosting_printing_foiling', label: 'FROSTING + PRINTING + FOILING' }
   ];
+  const capProcessOptions = ["Metal - Unassembly", "Non Metal - Unassembly", "Metal - Assembly", "Non Metal - Assembly"];
 
-  const capProcessOptions = ["Spraying", "Assembly", "Polishing", "None"];
-  const capMaterialOptions = ["Plastic", "Metal", "Wood", "Ceramic"];
+
   const pumpNeckTypeOptions = ["Standard", "Wide", "Narrow", "Custom"];
   const [exchangeRates, setExchangeRates] = useState({
     USD: 0,
@@ -90,6 +89,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
             neck_size: "",
             decoration: "N/A",
             decoration_no: "",
+            rate: "",
             team: "Glass Manufacturing - Mumbai",
             status: "Pending",
             team_tracking: {
@@ -105,7 +105,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
             neck_size: "",
             quantity: "",
             process: "N/A",
-            material: "N/A",
+            rate: "",
             team: "Cap Manufacturing - Delhi",
             status: "Pending",
             team_tracking: {
@@ -120,6 +120,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
             box_name: "N/A",
             quantity: "",
             approval_code: "",
+            rate: "",
             team: "Box Manufacturing - Pune",
             status: "Pending",
             team_tracking: {
@@ -134,7 +135,22 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
             pump_name: "N/A",
             neck_type: "N/A",
             quantity: "",
+            rate: "",
             team: "Pump Manufacturing - Chennai",
+            status: "Pending",
+            team_tracking: {
+              total_completed_qty: 0,
+              completed_entries: [],
+              status: "Pending"
+            }
+          }
+        ],
+        accessories: [
+          {
+            accessories_name: "N/A",
+            quantity: "",
+            rate: "",
+            team: "Accessories Team - Default",
             status: "Pending",
             team_tracking: {
               total_completed_qty: 0,
@@ -146,8 +162,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
       }
     }
   ]);
-
-
 
   const fetchExchangeRates = async () => {
     setIsLoadingRates(true);
@@ -185,7 +199,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
       totalPrice += (qty * rate) / 1000;
     });
 
-
     item.teamAssignments.caps.forEach(cap => {
       const qty = parseFloat(cap.quantity) || 0;
       const rate = parseFloat(cap.rate) || 0;
@@ -204,48 +217,14 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
       totalPrice += (qty * rate) / 1000;
     });
 
+    item.teamAssignments.accessories.forEach(accessory => {
+      const qty = parseFloat(accessory.quantity) || 0;
+      const rate = parseFloat(accessory.rate) || 0;
+      totalPrice += (qty * rate) / 1000;
+    });
+
     return totalPrice;
   };
-
-  const calculateTotalOrderPrice = () => {
-    return orderItems.reduce((total, item) => total + calculateItemPrice(item), 0);
-  };
-
-
-  const PriceDisplay = ({ priceINR, label = "Price" }) => {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-        <h5 className="text-sm font-medium text-green-800 mb-2">{label}</h5>
-        <div className="space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-green-700">₹ INR:</span>
-            <span className="font-semibold text-green-800">
-              {priceINR.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">$ USD:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.USD).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">€ EUR:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.EUR).toLocaleString('en-DE', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">£ GBP:</span>
-            <span className="font-medium text-green-800">
-              {isLoadingRates ? '...' : (priceINR * exchangeRates.GBP).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
 
   const addOrderItem = () => {
     const newItemNumber = orderItems.length + 1;
@@ -262,6 +241,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
               neck_size: "",
               decoration: "N/A",
               decoration_no: "",
+              rate: "",
               team: "Glass Manufacturing - Mumbai",
               status: "Pending",
               team_tracking: {
@@ -277,7 +257,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
               neck_size: "",
               quantity: "",
               process: "N/A",
-              material: "N/A",
+              rate: "",
               team: "Cap Manufacturing - Delhi",
               status: "Pending",
               team_tracking: {
@@ -292,6 +272,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
               box_name: "N/A",
               quantity: "",
               approval_code: "",
+              rate: "",
               team: "Box Manufacturing - Pune",
               status: "Pending",
               team_tracking: {
@@ -306,7 +287,22 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
               pump_name: "N/A",
               neck_type: "N/A",
               quantity: "",
+              rate: "",
               team: "Pump Manufacturing - Chennai",
+              status: "Pending",
+              team_tracking: {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: "Pending"
+              }
+            }
+          ],
+          accessories: [
+            {
+              accessories_name: "N/A",
+              quantity: "",
+              rate: "",
+              team: "Accessories Team - Default",
               status: "Pending",
               team_tracking: {
                 total_completed_qty: 0,
@@ -338,6 +334,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
         neck_size: "",
         decoration: "N/A",
         decoration_no: "",
+        rate: "",
         team: "Glass Manufacturing - Mumbai",
         status: "Pending",
         team_tracking: {
@@ -352,7 +349,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
         neck_size: "",
         quantity: "",
         process: "N/A",
-        material: "N/A",
+        rate: "",
         team: "Cap Manufacturing - Delhi",
         status: "Pending",
         team_tracking: {
@@ -366,6 +363,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
         box_name: "N/A",
         quantity: "",
         approval_code: "",
+        rate: "",
         team: "Box Manufacturing - Pune",
         status: "Pending",
         team_tracking: {
@@ -379,7 +377,21 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
         pump_name: "N/A",
         neck_type: "N/A",
         quantity: "",
+        rate: "",
         team: "Pump Manufacturing - Chennai",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      });
+    } else if (team === 'accessories') {
+      updatedItems[itemIndex].teamAssignments.accessories.push({
+        accessories_name: "N/A",
+        quantity: "",
+        rate: "",
+        team: "Accessories Team - Default",
         status: "Pending",
         team_tracking: {
           total_completed_qty: 0,
@@ -410,7 +422,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
     setOrderItems(updatedItems);
   };
-
 
   const handleOrderItemNameChange = (index, value) => {
     const updatedItems = [...orderItems];
@@ -859,7 +870,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  <div className="col-span-12 md:col-span-4">
+                                  {/* Cap Name - Takes more space on larger screens */}
+                                  <div className="col-span-12 sm:col-span-6 lg:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Cap Name</label>
                                     <div className="relative">
                                       <input
@@ -869,7 +881,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         onFocus={() => {
                                           setIsDropdownVisible(`cap-${itemIndex}-${capIndex}`);
                                           setFilteredCapData(
-                                            CapData.filter(c => c.FORMULA !== "N/A")
+                                            caps.filter(c => c.FORMULA !== "N/A")
                                           );
                                         }}
                                         onChange={(e) => {
@@ -879,15 +891,15 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setCapSearches(newSearches);
 
                                           const searchTerm = searchValue.toLowerCase();
-                                          const filtered = CapData.filter(c =>
+                                          const filtered = caps.filter(c =>
                                             (c.FORMULA !== "N/A" || searchTerm === "n/a") &&
                                             c.FORMULA.toLowerCase().includes(searchTerm)
                                           );
                                           setFilteredCapData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                        focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                                        placeholder:text-gray-400 z-50"
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -929,103 +941,73 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  <div className="col-span-12 md:col-span-8">
-                                    <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-2">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
-                                        <input
-                                          type="text"
-                                          value={cap.neck_size || ""}
-                                          className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
-                                          readOnly
-                                        />
-                                      </div>
+                                  {/* Neck Size */}
+                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
+                                    <input
+                                      type="text"
+                                      value={cap.neck_size || ""}
+                                      className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
+                                      readOnly
+                                    />
+                                  </div>
 
-                                      <div className="col-span-6 md:col-span-3">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Process</label>
-                                        <div className="relative">
-                                          <select
-                                            value={cap.process || "N/A"}
-                                            onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'process', e.target.value)}
-                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                          >
-                                            <option value="N/A">Please Select</option>
-                                            {capProcessOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
-                                          </select>
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                          >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                          </svg>
-                                        </div>
-                                      </div>
-
-                                      <div className="col-span-6 md:col-span-3">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Material</label>
-                                        <div className="relative">
-                                          <select
-                                            value={cap.material || "N/A"}
-                                            onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'material', e.target.value)}
-                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                          >
-                                            <option value="N/A">Please Select</option>
-                                            {capMaterialOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
-                                          </select>
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                          >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                          </svg>
-                                        </div>
-                                      </div>
-
-                                      <div className="col-span-3 md:col-span-2">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
-                                        <input
-                                          type="number"
-                                          value={cap.quantity || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'quantity', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                          focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="1"
-                                        />
-                                      </div>
-
-                                      <div className="col-span-3 md:col-span-2">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
-                                        <input
-                                          type="number"
-                                          value={cap.rate || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'rate', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                          focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="0"
-                                          step="0.01"
-                                        />
-                                      </div>
+                                  {/* Process */}
+                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Process</label>
+                                    <div className="relative">
+                                      <select
+                                        value={cap.process || "N/A"}
+                                        onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'process', e.target.value)}
+                                        className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                                      >
+                                        <option value="N/A">Please Select</option>
+                                        {capProcessOptions
+                                          .filter(name => name !== "N/A")
+                                          .map((name, idx) => (
+                                            <option key={idx} value={name}>
+                                              {name}
+                                            </option>
+                                          ))}
+                                      </select>
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
                                     </div>
+                                  </div>
+
+                                  {/* Quantity */}
+                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                    <input
+                                      type="number"
+                                      value={cap.quantity || ""}
+                                      onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'quantity', e.target.value)}
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      min="1"
+                                    />
+                                  </div>
+
+                                  {/* Rate */}
+                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
+                                    <input
+                                      type="number"
+                                      value={cap.rate || ""}
+                                      onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'rate', e.target.value)}
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      min="0"
+                                      step="0.01"
+                                    />
                                   </div>
                                 </div>
 
@@ -1350,13 +1332,154 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                             ))}
                           </div>
                         </div>
+
+
+                        <div className="p-6 bg-[#FFF8F3] border-t border-orange-200 rounded-b-xl">
+                          <div className="flex items-center mb-4">
+                            <h4 className="text-md font-medium text-orange-800">Team - Accessories</h4>
+                          </div>
+
+                          <div className="space-y-6">
+                            {item.teamAssignments.accessories.map((accessory, accessoryIndex) => (
+                              <div
+                                key={`accessory-${itemIndex}-${accessoryIndex}`}
+                                className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
+                              >
+                                <div className="grid grid-cols-12 gap-4">
+                                  {/* Accessory Name */}
+                                  <div className="col-span-12 md:col-span-4">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Accessory Name</label>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={accessorySearches[`${itemIndex}-${accessoryIndex}`] || ""}
+                                        placeholder={accessory.accessories_name !== "N/A" ? accessory.accessories_name : "Please Select"}
+                                        onFocus={() => {
+                                          setIsDropdownVisible(`accessory-${itemIndex}-${accessoryIndex}`);
+                                          // Use the correct property from your socket context data
+                                          setFilteredAccessoryData(accessories.filter(a => a.name !== "N/A"));
+                                        }}
+                                        onChange={(e) => {
+                                          const searchValue = e.target.value;
+                                          const newSearches = { ...accessorySearches };
+                                          newSearches[`${itemIndex}-${accessoryIndex}`] = searchValue;
+                                          setAccessorySearches(newSearches);
+
+                                          const searchTerm = searchValue.toLowerCase();
+                                          // Filter using the correct property (name, not accessory_name)
+                                          const filtered = accessories.filter(a =>
+                                            (a.name !== "N/A" || searchTerm === "n/a") &&
+                                            a.name.toLowerCase().includes(searchTerm)
+                                          );
+                                          setFilteredAccessoryData(filtered);
+                                        }}
+                                        className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
+                                      />
+                                      <svg className="h-5 w-5 absolute right-3 top-3 text-orange-500" fill="none" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                      {isDropdownVisible === `accessory-${itemIndex}-${accessoryIndex}` && (
+                                        <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
+                                          {filteredAccessoryData.length > 0 ? (
+                                            filteredAccessoryData.map((accessoryItem, idx) => (
+                                              <div
+                                                key={idx}
+                                                className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
+                                                onClick={() => {
+                                                  // Set the search input to show the selected accessory name
+                                                  const newSearches = { ...accessorySearches };
+                                                  newSearches[`${itemIndex}-${accessoryIndex}`] = accessoryItem.name;
+                                                  setAccessorySearches(newSearches);
+
+                                                  // FIX: Update with the correct property name (accessories_name)
+                                                  handleTeamDetailChange(itemIndex, accessoryIndex, 'accessories', 'accessories_name', accessoryItem.name);
+
+                                                  // Close the dropdown
+                                                  setIsDropdownVisible(null);
+                                                }}
+                                              >
+                                                <span className="text-orange-700 font-medium">
+                                                  {accessoryItem.name === "N/A" ? "Please Select" : accessoryItem.name}
+                                                </span>
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <div className="px-4 py-3 text-gray-500 italic">No results found</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Quantity and Rate */}
+                                  <div className="col-span-12 md:col-span-8">
+                                    <div className="grid grid-cols-12 gap-4">
+                                      <div className="col-span-6 md:col-span-6">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                        <input
+                                          type="number"
+                                          value={accessory.quantity || ""}
+                                          onChange={(e) =>
+                                            handleTeamDetailChange(itemIndex, accessoryIndex, 'accessories', 'quantity', e.target.value)
+                                          }
+                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                          min="1"
+                                        />
+                                      </div>
+                                      <div className="col-span-6 md:col-span-6">
+                                        <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
+                                        <input
+                                          type="number"
+                                          value={accessory.rate || ""}
+                                          onChange={(e) =>
+                                            handleTeamDetailChange(itemIndex, accessoryIndex, 'accessories', 'rate', e.target.value)
+                                          }
+                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                          min="0"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Buttons */}
+                                <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => addTeamAssignment(itemIndex, 'accessories')}
+                                    className="bg-orange-100 hover:bg-orange-200 p-1 rounded-full text-orange-700 border border-orange-300 shadow-sm transition"
+                                    title="Add Accessory Item"
+                                  >
+                                    <Plus size={16} strokeWidth={2.5} />
+                                  </button>
+                                  {item.teamAssignments.accessories.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeTeamAssignment(itemIndex, accessoryIndex, 'accessories')}
+                                      className="bg-orange-100 hover:bg-orange-200 p-1 rounded-full text-orange-700 border border-orange-300 shadow-sm transition"
+                                      title="Remove Accessory Item"
+                                    >
+                                      <Trash size={16} strokeWidth={2.5} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                       </div>
                     ))}
 
                     <div className="mt-8 mb-6">
-                      <PriceDisplay
-                        priceINR={calculateTotalOrderPrice()}
-                        label="Total Order Price"
+                      <EnhancedPriceDisplay
+                        orderItems={orderItems}
+                        exchangeRates={exchangeRates}
+                        isLoadingRates={isLoadingRates}
+                        orderNumber={orderNumber}
                       />
                       {isLoadingRates && (
                         <div className="mt-2 text-center">

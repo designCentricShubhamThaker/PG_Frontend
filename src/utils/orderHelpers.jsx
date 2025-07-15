@@ -1,6 +1,5 @@
 import axios from "axios";
 
-
 export const createDefaultItem = (type) => {
   const defaults = {
     glass: {
@@ -55,6 +54,18 @@ export const createDefaultItem = (type) => {
         completed_entries: [],
         status: "Pending"
       }
+    },
+    accessories: {
+      accessories_name: "N/A",
+      quantity: "",
+      rate: "",
+      team: "Accessories Team - Default",
+      status: "Pending",
+      team_tracking: {
+        total_completed_qty: 0,
+        completed_entries: [],
+        status: "Pending"
+      }
     }
   };
   return defaults[type];
@@ -71,6 +82,7 @@ export const handleDuplicateOrder = async ({
   setCapSearches,
   setBoxSearches,
   setPumpSearches,
+  setAccessorySearches,
   setShowDuplicateSection,
   setDuplicateOrderNumberValue
 }) => {
@@ -83,8 +95,9 @@ export const handleDuplicateOrder = async ({
   setDuplicateError("");
 
   try {
-    // const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
-    const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
+    const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
+    // const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
+
     if (response.data.success && response.data.data) {
       const orderData = response.data.data;
 
@@ -124,13 +137,22 @@ export const handleDuplicateOrder = async ({
             }))
           : [createDefaultItem("pumps")];
 
+        const accessoryItems = item.accessories?.length
+          ? item.accessories.map(acc => ({
+              ...createDefaultItem("accessories"),
+              ...acc,
+              quantity: acc.quantity?.toString() || ""
+            }))
+          : [createDefaultItem("accessories")];
+
         return {
           name: item.name || `Item ${index + 1}`,
           teamAssignments: {
             glass: glassItems,
             caps: capItems,
             boxes: boxItems,
-            pumps: pumpItems
+            pumps: pumpItems,
+            accessories: accessoryItems
           }
         };
       });
@@ -141,6 +163,7 @@ export const handleDuplicateOrder = async ({
       const newCapSearches = {};
       const newBoxSearches = {};
       const newPumpSearches = {};
+      const newAccessorySearches = {};
 
       transformedItems.forEach((item, itemIndex) => {
         item.teamAssignments.glass.forEach((glass, glassIndex) => {
@@ -155,12 +178,16 @@ export const handleDuplicateOrder = async ({
         item.teamAssignments.pumps.forEach((pump, pumpIndex) => {
           if (pump.pump_name !== "N/A") newPumpSearches[`${itemIndex}-${pumpIndex}`] = pump.pump_name;
         });
+        item.teamAssignments.accessories.forEach((acc, accIndex) => {
+          if (acc.accessories_name !== "N/A") newAccessorySearches[`${itemIndex}-${accIndex}`] = acc.accessories_name;
+        });
       });
 
       setGlassSearches(newGlassSearches);
       setCapSearches(newCapSearches);
       setBoxSearches(newBoxSearches);
       setPumpSearches(newPumpSearches);
+      setAccessorySearches(newAccessorySearches);
       setShowDuplicateSection(false);
       setDuplicateOrderNumberValue("");
     } else {

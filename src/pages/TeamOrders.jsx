@@ -1,6 +1,3 @@
-
-
-
 import { Plus, Eye, CheckCircle, ChevronRight, Search } from 'lucide-react';
 import { MdDeleteOutline } from "react-icons/md";
 import React, { useState, useEffect, useCallback } from 'react';
@@ -37,8 +34,9 @@ const TeamOrders = ({ orderType }) => {
   const [updateOrderDetails, setUpdateOrderDetails] = useState(false);
 
   const { socket, isConnected, notifyOrderDelete } = useSocket();
-  const { user } = useAuth()
+  const { user } = useAuth();
 
+  // Team-specific fetch (keep existing logic)
   const fetchOrders = async (type = orderType) => {
     try {
       setLoading(true);
@@ -47,7 +45,6 @@ const TeamOrders = ({ orderType }) => {
       if (hasOrdersInLocalStorage(type, user.team)) {
         const cachedOrders = getOrdersFromLocalStorage(type, user.team);
         setOrders(cachedOrders);
-        setFilteredOrders(cachedOrders);
         setLoading(false);
         return;
       }
@@ -64,9 +61,7 @@ const TeamOrders = ({ orderType }) => {
 
       // Save to localStorage with team-specific key
       saveOrdersToLocalStorage(fetchedOrders, type, user.team);
-
       setOrders(fetchedOrders);
-      setFilteredOrders(fetchedOrders);
       setLoading(false);
     } catch (err) {
       setError('Failed to fetch orders: ' + (err.response?.data?.message || err.message));
@@ -88,107 +83,47 @@ const TeamOrders = ({ orderType }) => {
         });
       }
     });
-
     return Array.from(teams);
   };
 
-  // Updated calculateCompletedItems with improved logic similar to DispatcherOrders
+  // IMPROVED: Use DispatcherOrders logic for item calculation
   const calculateCompletedItems = (order) => {
     if (!order.item_ids || !Array.isArray(order.item_ids)) {
-      console.log(`Order ${order.order_number}: No item_ids found`);
       return 0;
     }
 
     let completedItemsCount = 0;
-    const totalItems = order.item_ids.length;
 
-    console.log(`🔍 Checking completion for Order #${order.order_number} with ${totalItems} items`);
-
-    order.item_ids.forEach((item, itemIndex) => {
+    order.item_ids.forEach((item) => {
       const assignments = item.team_assignments;
-
       if (!assignments || typeof assignments !== 'object') {
-        console.log(`  Item ${itemIndex + 1}: No team_assignments - NOT COMPLETED`);
         return;
       }
 
-      // Get teams that have actual assignments (non-empty arrays)
-      const teamsWithAssignments = Object.keys(assignments).filter(teamName => {
+      let allAssignmentsForThisItem = [];
+      Object.keys(assignments).forEach(teamName => {
         const teamAssignments = assignments[teamName];
-        return Array.isArray(teamAssignments) && teamAssignments.length > 0;
+        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
+          allAssignmentsForThisItem.push(...teamAssignments);
+        }
       });
 
-      if (teamsWithAssignments.length === 0) {
-        console.log(`  Item ${itemIndex + 1}: No valid team assignments - NOT COMPLETED`);
+      if (allAssignmentsForThisItem.length === 0) {
         return;
       }
 
-      let itemFullyCompleted = true;
+      const isThisItemCompleted = allAssignmentsForThisItem.every(assignment => {
+        const completedQty = assignment.team_tracking?.total_completed_qty || 0;
+        const requiredQty = assignment.quantity || 0;
+        return completedQty >= requiredQty;
+      });
 
-      // Check each team that has assignments
-      for (let teamName of teamsWithAssignments) {
-        const teamAssignments = assignments[teamName];
-        let teamCompleted = true;
-
-        // Use the improved completion logic
-        for (let assignment of teamAssignments) {
-          // Check if total_completed_qty meets or exceeds the required quantity
-          const isCompleted = assignment.team_tracking?.total_completed_qty >= assignment.quantity;
-
-          if (!isCompleted) {
-            teamCompleted = false;
-            console.log(`    ❌ ${teamName} - Assignment ${assignment._id || 'N/A'} qty: ${assignment.team_tracking?.total_completed_qty || 0}/${assignment.quantity}`);
-            break;
-          } else {
-            console.log(`    ✅ ${teamName} - Assignment ${assignment._id || 'N/A'} qty: ${assignment.team_tracking?.total_completed_qty}/${assignment.quantity}`);
-          }
-        }
-
-        if (!teamCompleted) {
-          itemFullyCompleted = false;
-          console.log(`  ❌ Item ${itemIndex + 1}: ${teamName} has incomplete assignments`);
-          break;
-        }
-      }
-
-      if (itemFullyCompleted) {
+      if (isThisItemCompleted) {
         completedItemsCount++;
-        console.log(`  ✅ Item ${itemIndex + 1} (${item.name || 'Unknown'}): FULLY COMPLETED`);
-      } else {
-        console.log(`  ❌ Item ${itemIndex + 1} (${item.name || 'Unknown'}): NOT FULLY COMPLETED`);
       }
     });
 
-    console.log(`📦 Order #${order.order_number}: ${completedItemsCount}/${totalItems} items fully completed`);
     return completedItemsCount;
-  };
-
-  // Helper function to move orders between categories
-  const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
-    try {
-      // Remove from source category
-      const sourceOrders = getOrdersFromLocalStorage(fromCategory, user.team) || [];
-      const updatedSourceOrders = sourceOrders.filter(o => o._id !== order._id);
-      saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, user.team);
-
-      // Add to destination category
-      const destOrders = getOrdersFromLocalStorage(toCategory, user.team) || [];
-      const existingIndex = destOrders.findIndex(o => o._id === order._id);
-
-      if (existingIndex !== -1) {
-        // Update existing order in destination
-        destOrders[existingIndex] = order;
-      } else {
-        // Add new order to destination
-        destOrders.unshift(order);
-      }
-
-      saveOrdersToLocalStorage(destOrders, toCategory, user.team);
-
-      console.log(`🔄 Moved Order #${order.order_number} from ${fromCategory} to ${toCategory}`);
-    } catch (error) {
-      console.error('Error moving order between categories:', error);
-    }
   };
 
   const calculateTotalItems = (order) => {
@@ -196,35 +131,51 @@ const TeamOrders = ({ orderType }) => {
     return order.item_ids.length;
   };
 
-
-
-  // Updated calculateCompletionPercentage with improved logic
+  // IMPROVED: Use DispatcherOrders logic for completion percentage
   const calculateCompletionPercentage = (order) => {
-    if (!order || !order.item_ids || order.item_ids.length === 0) {
-      console.log(`Order ${order.order_number || 'Unknown'}: No items found - 0% complete`);
+    if (!order || !order.item_ids || !Array.isArray(order.item_ids) || order.item_ids.length === 0) {
       return 0;
     }
 
     const totalItems = order.item_ids.length;
     const completedItems = calculateCompletedItems(order);
 
-    // Simple percentage: (completed items / total items) * 100
+    if (totalItems === 0) return 0;
+
     const percentage = Math.round((completedItems / totalItems) * 100);
-
-    console.log(`📊 Order #${order.order_number}: ${completedItems}/${totalItems} items = ${percentage}% complete`);
-
-    // Additional safety check - if percentage is 100%, double-check order status
-    if (percentage === 100) {
-      console.log(`🎉 Order #${order.order_number}: All items completed for team ${user.team}`);
-    }
-
-    return percentage;
+    return Math.min(percentage, 100);
   };
 
-  // Updated handleProgressUpdate with improved logic
+  // Helper function to move orders between categories (team-specific)
+  const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
+    try {
+      console.log(`Moving order ${order.order_number} from ${fromCategory} to ${toCategory} for team ${user.team}`);
+      
+      // Remove from source category
+      const sourceOrders = getOrdersFromLocalStorage(fromCategory, user.team) || [];
+      const updatedSourceOrders = sourceOrders.filter(o => o._id !== order._id);
+      saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, user.team);
+      
+      // Add to destination category
+      const destOrders = getOrdersFromLocalStorage(toCategory, user.team) || [];
+      const existingIndex = destOrders.findIndex(o => o._id === order._id);
+
+      if (existingIndex !== -1) {
+        destOrders[existingIndex] = order;
+      } else {
+        destOrders.unshift(order);
+      }
+      
+      saveOrdersToLocalStorage(destOrders, toCategory, user.team);
+      console.log(`Successfully moved order ${order.order_number} for team ${user.team}`);
+    } catch (error) {
+      console.error('Error moving order between categories:', error);
+    }
+  };
+
+  // IMPROVED: Use DispatcherOrders logic for progress updates
   const handleProgressUpdate = useCallback((progressData) => {
     console.log('📈 Received progress update:', progressData);
-
     const orderNumber = progressData.orderNumber || progressData.order_number;
     if (!orderNumber) {
       console.warn('No order number in progress update');
@@ -235,35 +186,55 @@ const TeamOrders = ({ orderType }) => {
       const updatedOrders = prevOrders.map(order => {
         if (order.order_number === orderNumber) {
           const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
-
-          const teamType = progressData.team?.toLowerCase().includes('glass') ? 'glass' :
-            progressData.team?.toLowerCase().includes('box') ? 'boxes' :
-              progressData.team?.toLowerCase().includes('cap') ? 'caps' :
-                progressData.team?.toLowerCase().includes('pump') ? 'pumps' : null;
-
+          
           const mergedOrder = {
             ...order,
             ...updatedOrder,
             item_ids: order.item_ids.map(existingItem => {
               const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
-              if (updatedItem) {
-                const mergedTeamAssignments = {
-                  ...existingItem.team_assignments
-                };
+              if (!updatedItem) return existingItem;
 
-                if (teamType && updatedItem.team_assignments?.[teamType]) {
-                  mergedTeamAssignments[teamType] = updatedItem.team_assignments[teamType];
-                }
+              // Merge team assignments deeply (like DispatcherOrders)
+              const mergedAssignments = {};
+              const allTeams = new Set([
+                ...Object.keys(existingItem.team_assignments || {}),
+                ...Object.keys(updatedItem.team_assignments || {})
+              ]);
 
-                return {
-                  ...existingItem,
-                  ...updatedItem,
-                  team_assignments: mergedTeamAssignments
-                };
-              }
-              return existingItem;
+              allTeams.forEach(team => {
+                const existingTeamAssignments = existingItem.team_assignments?.[team] || [];
+                const updatedTeamAssignments = updatedItem.team_assignments?.[team] || [];
+
+                const mergedTeamAssignments = existingTeamAssignments.map(assign => {
+                  const updated = updatedTeamAssignments.find(u => u._id === assign._id);
+                  return updated ? { ...assign, ...updated } : assign;
+                });
+
+                updatedTeamAssignments.forEach(updated => {
+                  if (!mergedTeamAssignments.find(assign => assign._id === updated._id)) {
+                    mergedTeamAssignments.push(updated);
+                  }
+                });
+
+                mergedAssignments[team] = mergedTeamAssignments;
+              });
+
+              // Calculate item status (like DispatcherOrders)
+              const isItemCompleted = Object.values(mergedAssignments).flat().every(assign => {
+                const completedQty = assign.team_tracking?.total_completed_qty || 0;
+                const requiredQty = assign.quantity || 0;
+                return completedQty >= requiredQty;
+              });
+
+              return {
+                ...existingItem,
+                ...updatedItem,
+                team_assignments: mergedAssignments,
+                item_status: isItemCompleted ? 'Completed' : 'Pending' 
+              };
             })
           };
+
           const completedItems = calculateCompletedItems(mergedOrder);
           const totalItems = calculateTotalItems(mergedOrder);
           const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
@@ -276,31 +247,96 @@ const TeamOrders = ({ orderType }) => {
             order_status: newStatus
           };
 
-          console.log(`🔄 Order #${orderNumber} - Status: ${previousStatus} → ${newStatus}, Completion: ${completionPercentage}%`);
+          console.log(`📊 Order ${orderNumber} Progress: ${completedItems}/${totalItems} items (${completionPercentage}%) - Status: ${newStatus}`);
 
+          // Handle status changes and move between categories
           if (previousStatus !== newStatus) {
-            if (newStatus === 'Completed') {
+            if (newStatus === 'Completed' && orderType === 'pending') {
               moveOrderBetweenCategories(finalOrder, 'pending', 'completed');
-              console.log(`✅ Order #${orderNumber} moved to completed category`);
-            } else if (newStatus === 'Pending' && previousStatus === 'Completed') {
+              toast.success(`Order #${orderNumber} has been completed!`);
+            } else if (newStatus === 'Pending' && previousStatus === 'Completed' && orderType === 'completed') {
               moveOrderBetweenCategories(finalOrder, 'completed', 'pending');
-              console.log(`⏪ Order #${orderNumber} moved back to pending category`);
+              toast.info(`Order #${orderNumber} moved back to pending`);
             }
-          } else {
-            updateDispatcherOrderInLocalStorage(finalOrder, user.team);
           }
-
+          
+          updateDispatcherOrderInLocalStorage(finalOrder, user.team);
           return finalOrder;
         }
         return order;
       });
+      
       saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
       return updatedOrders;
     });
+  }, [orderType, user.team]);
 
-  }, [orderType, moveOrderBetweenCategories, calculateCompletedItems, calculateTotalItems]);
+  // Handle new orders (team-specific)
+  const handleNewOrder = useCallback((orderData) => {
+    try {
+      const { orderData: newOrder, orderNumber,  } = orderData;
+      if (!newOrder || !newOrder._id) {
+        return;
+      }
+      const relevantToTeam = newOrder.item_ids?.some(item => 
+        item.team_assignments && Object.keys(item.team_assignments).includes(user.team)
+      );
+
+      if (!relevantToTeam) {
+        return; 
+      }
+
+      if (orderType === 'pending') {
+        setOrders(prevOrders => {
+          const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+
+          let updatedOrders;
+          if (existingOrderIndex !== -1) {
+            updatedOrders = [...prevOrders];
+            updatedOrders[existingOrderIndex] = newOrder;
+          } else {
+            updatedOrders = [newOrder, ...prevOrders];
+          }
+          
+          saveOrdersToLocalStorage(updatedOrders, 'pending', user.team);
+          return updatedOrders;
+        });
+
+        toast.success(`New order #${orderNumber} assigned to ${user.team} team`);
+      }
+    } catch (error) {
+      console.error('Error handling new order:', error);
+    }
+  }, [orderType, user.team]);
 
 
+  const handleOrderUpdated = useCallback((updateData) => {
+    try {
+      const { orderData: updatedOrder, orderNumber } = updateData;
+      if (!updatedOrder || !updatedOrder._id) {
+        return;
+      }
+      const relevantToTeam = updatedOrder.item_ids?.some(item => 
+        item.team_assignments && Object.keys(item.team_assignments).includes(user.team)
+      );
+
+      if (!relevantToTeam) {
+        return; 
+      }
+
+      setOrders(prevOrders => {
+        const updatedOrders = prevOrders.map(order =>
+          order._id === updatedOrder._id ? updatedOrder : order
+        );
+        saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
+        return updatedOrders;
+      });
+      
+      toast.info(`Order #${orderNumber} has been updated`);
+    } catch (error) {
+      console.error('Error handling order update:', error);
+    }
+  }, [orderType, user.team]);
 
   const handleOrderDeleted = useCallback((deleteData) => {
     console.log('🗑️ Team orders received order delete notification:', deleteData);
@@ -310,69 +346,63 @@ const TeamOrders = ({ orderType }) => {
         console.warn('No order ID in delete notification');
         return;
       }
+      
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.filter(order => order._id !== orderId);
         saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
         return updatedOrders;
       });
 
-      setFilteredOrders(prevFiltered => {
-        return prevFiltered.filter(order => order._id !== orderId);
-      });
       deleteOrderFromLocalStorage(orderId, user.team);
-
       toast.success(`Order #${orderNumber} has been deleted successfully`);
       console.log(`✅ Order #${orderNumber} removed from team view`);
-
     } catch (error) {
       console.error('Error handling order delete notification:', error);
     }
   }, [orderType, user.team]);
 
+  // Socket listeners
   useEffect(() => {
     if (!socket || !isConnected) return;
+    
     console.log('🔌 Setting up socket listeners for team orders');
+    socket.on('new-order', handleNewOrder);
+    socket.on('order-updated', handleOrderUpdated);
     socket.on('team-progress-updated', handleProgressUpdate);
     socket.on('order-deleted', handleOrderDeleted);
 
     return () => {
+      socket.off('new-order', handleNewOrder);
+      socket.off('order-updated', handleOrderUpdated);
       socket.off('team-progress-updated', handleProgressUpdate);
       socket.off('order-deleted', handleOrderDeleted);
       console.log('🔌 Cleaned up socket listeners');
     };
-  }, [socket, isConnected, handleProgressUpdate, handleOrderDeleted]);
+  }, [socket, isConnected, handleNewOrder, handleOrderUpdated, handleProgressUpdate, handleOrderDeleted]);
 
   useEffect(() => {
     fetchOrders(orderType);
   }, [orderType, user.team, user.username]);
 
-  // Updated filtering logic similar to DispatcherOrders
   useEffect(() => {
     if (orders.length === 0) {
       setFilteredOrders([]);
       return;
     }
 
-    console.log(`🔍 Filtering orders for ${orderType} view. Total orders:`, orders.length);
-
-    // Filter orders based on orderType
     let filteredByType = orders.filter(order => {
-      const isCompleted = order.order_status === 'Completed';
+      const completionPercentage = calculateCompletionPercentage(order);
+      const isCompleted = completionPercentage === 100 || order.order_status === 'Completed';
 
       if (orderType === 'pending') {
-        const shouldShow = !isCompleted;
-        console.log(`  Order #${order.order_number}: status=${order.order_status}, show in pending=${shouldShow}`);
-        return shouldShow;
+        return !isCompleted;
       }
       if (orderType === 'completed') {
-        const shouldShow = isCompleted;
-        console.log(`  Order #${order.order_number}: status=${order.order_status}, show in completed=${shouldShow}`);
-        return shouldShow;
+        return isCompleted;
       }
-      return true; // For 'all' view
+      return true;
     });
 
-    // Apply search filter if exists
     if (searchTerm) {
       filteredByType = filteredByType.filter(order =>
         order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -381,11 +411,8 @@ const TeamOrders = ({ orderType }) => {
       );
     }
 
-    console.log(`📊 Setting filtered orders for ${orderType} view:`, filteredByType.length);
     setFilteredOrders(filteredByType);
-
-  }, [orders, orderType, user.team,user.username, searchTerm]);
-
+  }, [orders, orderType, searchTerm]);
 
   const handleCreateOrder = async () => {
     await fetchOrders(orderType);
@@ -545,8 +572,6 @@ const TeamOrders = ({ orderType }) => {
     setFilteredOrders(updatedOrders);
   };
 
-
-
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -555,7 +580,6 @@ const TeamOrders = ({ orderType }) => {
       year: 'numeric'
     });
   };
-
 
   const indexOfLastOrder = currentPage * ordersPerPage;
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;

@@ -10,10 +10,9 @@ const AddNewCapChild = ({
   loading = false
 }) => {
   const [formData, setFormData] = useState({
-    CO_ITEM_NO: '',
+
     FORMULA: '',
-    ML: '',
-    NECK_DIAM: ''
+
   });
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -23,17 +22,12 @@ const AddNewCapChild = ({
     if (isOpen) {
       if (editingBottle) {
         setFormData({
-          CO_ITEM_NO: editingBottle.CO_ITEM_NO || '',
-          FORMULA: editingBottle.FORMULA || '',
-          ML: editingBottle.ML || '',
-          NECK_DIAM: editingBottle.NECK_DIAM || ''
+          FORMULA: editingBottle.FORMULA || ''
         });
       } else {
         setFormData({
-          CO_ITEM_NO: '',
           FORMULA: '',
-          ML: '',
-          NECK_DIAM: ''
+            
         });
       }
       setError('');
@@ -114,22 +108,7 @@ const AddNewCapChild = ({
 
             <div className="bg-[#FFF0E7] p-6 shadow-none mt-5 border-0 border-none">
               <div className="grid grid-cols-12 gap-4">
-
-                <div className="col-span-3">
-                  <label className="block text-sm font-medium text-orange-900 mb-2">
-                    CO Item No
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.CO_ITEM_NO}
-                    onChange={(e) => handleInputChange('CO_ITEM_NO', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="Enter CO Item No"
-                  />
-                </div>
-
-                {/* Formula */}
-                <div className="col-span-5">
+                <div className="col-span-12">
                   <label className="block text-sm font-medium text-orange-900 mb-2">
                     Formula *
                   </label>
@@ -141,21 +120,7 @@ const AddNewCapChild = ({
                     placeholder="Enter Formula"
                     required
                   />
-                </div>
-
-            
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-orange-900 mb-2">
-                    Neck Diameter
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.NECK_DIAM}
-                    onChange={(e) => handleInputChange('NECK_DIAM', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="Neck Diameter"
-                  />
-                </div>
+                </div> 
               </div>
             </div>
 

@@ -16,6 +16,7 @@ import DecoFoilDashbaord from './Dashboards/DecoFoilDashbaord.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import SuperAdminDashboard from './Dashboards/SuperAdminDashboard.jsx';
 import TeamDashbaord from './Dashboards/TeamDashboard.jsx';
+import AccessoriesDashboard from './Dashboards/AccessoriesDashboard.jsx';
 // import LinerDashboard from './Dashboards/LinerDashboard';
 
 const App = () => {
@@ -51,8 +52,8 @@ const App = () => {
               element={<ProtectedRoutes element={<GlassDashboard />} allowedRoles={['user']} allowedTeams={['glass']} />}
             />
             <Route
-              path="/dashboard/cap"
-              element={<ProtectedRoutes element={<CapDashboard />} allowedRoles={['user']} allowedTeams={['cap']} />}
+              path="/dashboard/caps"
+              element={<ProtectedRoutes element={<CapDashboard />} allowedRoles={['user']} allowedTeams={['caps']} />}
             />
             <Route
               path="/dashboard/pumps"
@@ -61,6 +62,10 @@ const App = () => {
             <Route
               path="/dashboard/boxes"
               element={<ProtectedRoutes element={<BoxesDashboard />} allowedRoles={['user']} allowedTeams={['boxes']} />}
+            />
+            <Route
+              path="/dashboard/accessories"
+              element={<ProtectedRoutes element={<AccessoriesDashboard />} allowedRoles={['user']} allowedTeams={['accessories']} />}
             />
 
             <Route

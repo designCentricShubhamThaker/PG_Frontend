@@ -1,5 +1,3 @@
-
-
 const STORAGE_KEYS = {
   PENDING_ORDERS: '_pendingOrders',
   COMPLETED_ORDERS: '_completedOrders',
@@ -11,12 +9,13 @@ const TEAMS = {
   GLASS: 'glass',
   BOXES: 'boxes',
   PUMPS: 'pumps',
-  CAP: 'caps',
-  MARKETING: 'marketing' ,
+  CAPS: 'caps',
+  ACCESSORIES: "accessories",
+  MARKETING: 'marketing',
   PRINTING: "printing",
-  FOILING:"foiling",
-  COATING:"coating",
-  FROSTING:"frosting",
+  FOILING: "foiling",
+  COATING: "coating",
+  FROSTING: "frosting",
 };
 
 // Teams that behave like dispatcher (use order_status for completed/pending logic)
@@ -30,7 +29,8 @@ const getStorageKey = (orderType, team) => {
       return validTeam + STORAGE_KEYS.PENDING_ORDERS;
     case 'completed':
       return validTeam + STORAGE_KEYS.COMPLETED_ORDERS;
-  
+    default:
+      return validTeam + STORAGE_KEYS.PENDING_ORDERS;
   }
 };
 
@@ -66,7 +66,7 @@ const hasOrdersInLocalStorage = (orderType, team) => {
   return !!localStorage.getItem(storageKey);
 };
 
-const updateDispatcherOrderInLocalStorage = (updatedOrder, team ) => {
+const updateDispatcherOrderInLocalStorage = (updatedOrder, team) => {
   try {
     if (!updatedOrder || typeof updatedOrder !== 'object' || !updatedOrder._id) {
       console.error('Invalid order data for dispatcher-like team update');
@@ -93,14 +93,106 @@ const updateDispatcherOrderInLocalStorage = (updatedOrder, team ) => {
     const pendingSaved = saveOrdersToLocalStorage(newPendingOrders, 'pending', team);
     const completedSaved = saveOrdersToLocalStorage(newCompletedOrders, 'completed', team);
     
-    if (pendingSaved && completedSaved) {
-      
-      return true;
-    }
-    
-    return false;
+    return pendingSaved && completedSaved;
   } catch (error) {
     console.error(`Error updating ${team} order in localStorage:`, error);
+    return false;
+  }
+};
+
+const areAllTeamAssignmentsCompleted = (order, team) => {
+  const items = order.item_ids || [];
+  if (items.length === 0) return false;
+
+  if (team === TEAMS.CAPS) {
+    return items.every(item => {
+      const capsAssignments = item.team_assignments?.caps || [];
+      if (capsAssignments.length === 0) return false;
+      
+      return capsAssignments.every(capItem => {
+        const totalQty = capItem.quantity || 0;
+        const hasAssembly = capItem.process && capItem.process.includes('Assembly');
+        
+        if (hasAssembly) {
+          const metalCompleted = capItem.metal_tracking?.total_completed_qty || 0;
+          const assemblyCompleted = capItem.assembly_tracking?.total_completed_qty || 0;
+          const minCompleted = Math.min(metalCompleted, assemblyCompleted);
+          return minCompleted >= totalQty;
+        } else {
+          const metalCompleted = capItem.metal_tracking?.total_completed_qty || 0;
+          return metalCompleted >= totalQty;
+        }
+      });
+    });
+  }
+
+  return items.every(item => {
+    const teamAssignments = item.team_assignments?.[team] || [];
+    if (teamAssignments.length === 0) return false;
+
+    return teamAssignments.every(assignment => {
+      const completed = assignment.team_tracking?.total_completed_qty || 0;
+      const total = assignment.quantity || 0;
+      return completed >= total;
+    });
+  });
+};
+
+const determineOrderType = (order, team) => {
+  if (DISPATCHER_LIKE_TEAMS.includes(team)) {
+    return order.order_status === 'Completed' ? 'completed' : 'pending';
+  }
+
+  const isCompleted = areAllTeamAssignmentsCompleted(order, team);
+  return isCompleted ? 'completed' : 'pending';
+};
+
+const updateOrderInLocalStorage = (orderId, updatedOrder, team) => {
+  try {
+    if (!orderId || !updatedOrder) {
+      console.error('Invalid order data for update');
+      return false;
+    }
+
+    if (DISPATCHER_LIKE_TEAMS.includes(team)) {
+      return updateDispatcherOrderInLocalStorage(updatedOrder, team);
+    }
+
+    const updatedOrderCopy = JSON.parse(JSON.stringify(updatedOrder));
+    const newOrderType = determineOrderType(updatedOrderCopy, team);
+    
+    console.log(`Updating order ${orderId} for team ${team}. New type: ${newOrderType}`);
+    
+    // Get current orders from both pending and completed
+    const pendingOrders = getOrdersFromLocalStorage('pending', team);
+    const completedOrders = getOrdersFromLocalStorage('completed', team);
+    
+    // Remove the order from both lists
+    const newPendingOrders = pendingOrders.filter(order => order._id !== orderId);
+    const newCompletedOrders = completedOrders.filter(order => order._id !== orderId);
+    
+    // Add the updated order to the correct list
+    if (newOrderType === 'completed') {
+      newCompletedOrders.push(updatedOrderCopy);
+      console.log(`Added order ${orderId} to completed orders`);
+    } else {
+      newPendingOrders.push(updatedOrderCopy);
+      console.log(`Added order ${orderId} to pending orders`);
+    }
+    
+    // Save both lists
+    const pendingSaved = saveOrdersToLocalStorage(newPendingOrders, 'pending', team);
+    const completedSaved = saveOrdersToLocalStorage(newCompletedOrders, 'completed', team);
+    
+    if (pendingSaved && completedSaved) {
+      console.log(`Order ${orderId} successfully moved to ${newOrderType} for team ${team}`);
+      return true;
+    } else {
+      console.error(`Failed to save orders for team ${team}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error updating order in localStorage:', error);
     return false;
   }
 };
@@ -139,74 +231,13 @@ const addOrderToLocalStorage = (newOrder, team) => {
   }
 };
 
-const areAllTeamAssignmentsCompleted = (order, team) => {
-  const items = order.item_ids || [];
-  if (items.length === 0) return false;
-
-  return items.every(item => {
-    const teamAssignments = item.team_assignments?.[team] || [];
-    if (teamAssignments.length === 0) return false;
-
-    return teamAssignments.every(assignment => {
-      const completed = assignment.team_tracking?.total_completed_qty || 0;
-      const total = assignment.quantity || 0;
-      return completed >= total;
-    });
-  });
-};
-
-const determineOrderType = (order, team) => {
-  if (DISPATCHER_LIKE_TEAMS.includes(team)) {
-    return order.order_status === 'Completed' ? 'completed' : 'pending';
-  }
-
-  const isCompleted = areAllTeamAssignmentsCompleted(order, team);
-  return isCompleted ? 'completed' : 'pending';
-};
-
-const updateOrderInLocalStorage = (orderId, updatedOrder, team) => {
-  try {
-    if (!orderId || !updatedOrder) {
-      console.error('Invalid order data for update');
-      return false;
-    }
-
-    if (DISPATCHER_LIKE_TEAMS.includes(team)) {
-      return updateDispatcherOrderInLocalStorage(updatedOrder, team);
-    }
-
-    const updatedOrderCopy = JSON.parse(JSON.stringify(updatedOrder));
-    const newOrderType = determineOrderType(updatedOrderCopy, team);
-    
-    const pendingOrders = getOrdersFromLocalStorage('pending', team);
-    const completedOrders = getOrdersFromLocalStorage('completed', team);
-    
-    const newPendingOrders = pendingOrders.filter(order => order._id !== orderId);
-    const newCompletedOrders = completedOrders.filter(order => order._id !== orderId);
-    
-    if (newOrderType === 'completed') {
-      newCompletedOrders.push(updatedOrderCopy);
-    } else {
-      newPendingOrders.push(updatedOrderCopy);
-    }
-    
-    saveOrdersToLocalStorage(newPendingOrders, 'pending', team);
-    saveOrdersToLocalStorage(newCompletedOrders, 'completed', team);
-    
-    console.log(`Order ${orderId} moved to ${newOrderType} for team ${team}`);
-    return true;
-  } catch (error) {
-    console.error('Error updating order in localStorage:', error);
-    return false;
-  }
-};
-
 const deleteOrderFromLocalStorage = (orderId, team) => {
   try {
     if (!orderId) {
       console.error('Invalid order ID for deletion');
       return false;
     }
+    
     const pendingOrders = getOrdersFromLocalStorage('pending', team);
     const completedOrders = getOrdersFromLocalStorage('completed', team);
     

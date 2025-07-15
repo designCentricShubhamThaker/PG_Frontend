@@ -178,8 +178,8 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                     );
 
                     const validFoiling = (item.team_assignments?.foiling || [])
-                        .filter(foiling => {
-                            const glassId = foiling.glass_item_id?._id || foiling.glass_item_id;
+                        .filter(f => {
+                            const glassId = f.glass_item_id?._id || f.glass_item_id;
 
                             const isGlassDone = glassAssignments.some(g =>
                                 g._id?.toString() === glassId?.toString() &&
@@ -190,7 +190,7 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
                             return isGlassDone && prevDone;
                         })
-                        .map(foiling => preserveGlassItemDetails(foiling, glassAssignments));
+                        .map(f => preserveGlassItemDetails(f, glassAssignments));
 
                     return {
                         ...item,
@@ -205,7 +205,8 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
             updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.FOILING);
 
-            if (notifyProgressUpdate && hasCompletedWork && targetGlassItem) {
+            // ✅ Always notify for partial or full updates
+            if (notifyProgressUpdate && updates.length > 0 && targetGlassItem) {
                 const glassItemId = targetGlassItem?._id || targetGlassItem;
                 notifyProgressUpdate({
                     orderNumber: orderData.order_number,
@@ -254,6 +255,7 @@ const UpdateFoilQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             setLoading(false);
         }
     };
+
 
     const ProgressBar = ({ assignment, todayQty }) => {
         const currentProgress = calculateProgress(assignment);

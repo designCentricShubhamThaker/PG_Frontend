@@ -112,137 +112,140 @@ const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
   };
 
   const handleSave = async () => {
-  try {
-    setLoading(true);
-    setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-    const updates = assignments
-      .filter(assignment => assignment.todayQty > 0)
-      .map(assignment => {
-        const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
-        const newCompleted = currentCompleted + assignment.todayQty;
-        const newEntry = {
-          date: new Date().toISOString(),
-          quantity: assignment.todayQty,
-          notes: assignment.notes || '',
-          operator: user.name || 'Current User'
-        };
+      const updates = assignments
+        .filter(assignment => assignment.todayQty > 0)
+        .map(assignment => {
+          const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
+          const newCompleted = currentCompleted + assignment.todayQty;
+          const newEntry = {
+            date: new Date().toISOString(),
+            quantity: assignment.todayQty,
+            notes: assignment.notes || '',
+            operator: user.name || 'Current User'
+          };
 
-        return {
-          assignmentId: assignment._id,
-          newEntry,
-          newTotalCompleted: newCompleted,
-          newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
-          glass_item_id: assignment.glass_item_id,
-          frosting_name: assignment.frosting_name,
-          quantity: assignment.quantity
-        };
-      });
+          return {
+            assignmentId: assignment._id,
+            newEntry,
+            newTotalCompleted: newCompleted,
+            newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
+            glass_item_id: assignment.glass_item_id,
+            frosting_name: assignment.frosting_name,
+            quantity: assignment.quantity
+          };
+        });
 
-    if (updates.length === 0) {
-      setError('Please enter quantity for at least one assignment');
-      setLoading(false);
-      return;
-    }
-
-    for (let i = 0; i < updates.length; i++) {
-      const assignment = assignments[i];
-      const remaining = getRemainingQty(assignment);
-      if (assignment.todayQty > remaining) {
-        setError(`Quantity for ${assignment.frosting_name} exceeds remaining amount (${remaining})`);
+      if (updates.length === 0) {
+        setError('Please enter quantity for at least one assignment');
         setLoading(false);
         return;
       }
-    }
 
-    const response = await axios.patch('http://localhost:5000/api/frost', {
-      orderNumber: orderData.order_number,
-      itemId: itemData._id,
-      updates
-    });
+      for (let i = 0; i < updates.length; i++) {
+        const assignment = assignments[i];
+        const remaining = getRemainingQty(assignment);
+        if (assignment.todayQty > remaining) {
+          setError(`Quantity for ${assignment.frosting_name} exceeds remaining amount (${remaining})`);
+          setLoading(false);
+          return;
+        }
+      }
 
-    if (!response.data.success) throw new Error(response.data.message || 'Update failed');
-
-    const updatedOrder = response.data.data.order;
-    const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
-    const hasCompletedWork = completedUpdates.length > 0;
-    const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
-    const targetGlassItem = targetAssignment?.glass_item_id;
-
-    const filteredUpdatedOrder = {
-      ...updatedOrder,
-      item_ids: updatedOrder.item_ids.map(item => {
-        const glassAssignments = item.team_assignments?.glass || [];
-
-        const completedGlass = glassAssignments.filter(g =>
-          g.team_tracking?.total_completed_qty >= g.quantity
-        );
-
-        const validFrosting = (item.team_assignments?.frosting || [])
-          .filter(f => {
-            const glassId = f.glass_item_id?._id || f.glass_item_id;
-
-            const isGlassDone = glassAssignments.some(g =>
-              g._id?.toString() === glassId?.toString() &&
-              g.team_tracking?.total_completed_qty >= g.quantity
-            );
-
-            const prevDone = isPreviousTeamsCompleted(item, 'frosting', glassId);
-
-            return isGlassDone && prevDone;
-          })
-          .map(f => preserveGlassItemDetails(f, glassAssignments));
-
-        return {
-          ...item,
-          team_assignments: {
-            ...item.team_assignments,
-            glass: completedGlass,
-            frosting: validFrosting
-          }
-        };
-      }).filter(item => item.team_assignments?.frosting?.length > 0)
-    };
-
-    updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.FROSTING);
-
-    if (notifyProgressUpdate && hasCompletedWork && targetGlassItem) {
-      const glassItemId = targetGlassItem?._id || targetGlassItem;
-      notifyProgressUpdate({
+      const response = await axios.patch('http://localhost:5000/api/frost', {
         orderNumber: orderData.order_number,
-        itemName: itemData.name,
-        team: user.team,
-        updateSource: 'frosting_update',
-        targetGlassItem: glassItemId,
-        hasCompletedWork,
-        updates: updates.map(u => ({
-          assignmentId: u.assignmentId,
-          quantity: u.newEntry.quantity,
-          notes: u.newEntry.notes,
-          newTotalCompleted: u.newTotalCompleted,
-          newStatus: u.newStatus,
-          glass_item_id: u.glass_item_id,
-          frosting_name: u.frosting_name
-        })),
-        updatedOrder: filteredUpdatedOrder,
-        customerName: orderData.customer_name,
-        dispatcherName: orderData.dispatcher_name,
-        timestamp: new Date().toISOString()
+        itemId: itemData._id,
+        updates
       });
-    }
 
-    setSuccessMessage('Quantities updated successfully!');
-    setTimeout(() => {
-      onUpdate?.(filteredUpdatedOrder);
-      onClose();
-    }, 1500);
-  } catch (err) {
-    console.error('❌ Error updating quantities:', err);
-    setError(err?.response?.data?.message || err.message || 'Failed to update quantities');
-  } finally {
-    setLoading(false);
-  }
-};
+      if (!response.data.success) throw new Error(response.data.message || 'Update failed');
+
+      const updatedOrder = response.data.data.order;
+
+      const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
+      const hasCompletedWork = completedUpdates.length > 0;
+      const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
+      const targetGlassItem = targetAssignment?.glass_item_id;
+
+      const filteredUpdatedOrder = {
+        ...updatedOrder,
+        item_ids: updatedOrder.item_ids.map(item => {
+          const glassAssignments = item.team_assignments?.glass || [];
+
+          const completedGlass = glassAssignments.filter(g =>
+            g.team_tracking?.total_completed_qty >= g.quantity
+          );
+
+          const validFrosting = (item.team_assignments?.frosting || [])
+            .filter(f => {
+              const glassId = f.glass_item_id?._id || f.glass_item_id;
+
+              const isGlassDone = glassAssignments.some(g =>
+                g._id?.toString() === glassId?.toString() &&
+                g.team_tracking?.total_completed_qty >= g.quantity
+              );
+
+              const prevDone = isPreviousTeamsCompleted(item, 'frosting', glassId);
+              return isGlassDone && prevDone;
+            })
+            .map(f => preserveGlassItemDetails(f, glassAssignments));
+
+          return {
+            ...item,
+            team_assignments: {
+              ...item.team_assignments,
+              glass: completedGlass,
+              frosting: validFrosting
+            }
+          };
+        }).filter(item => item.team_assignments?.frosting?.length > 0)
+      };
+
+      updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.FROSTING);
+
+      // ✅ Notify progress update even for partial completions
+      if (notifyProgressUpdate && updates.length > 0 && targetGlassItem) {
+        const glassItemId = targetGlassItem?._id || targetGlassItem;
+
+        notifyProgressUpdate({
+          orderNumber: orderData.order_number,
+          itemName: itemData.name,
+          team: user.team,
+          updateSource: 'frosting_update',
+          targetGlassItem: glassItemId,
+          hasCompletedWork,
+          updates: updates.map(u => ({
+            assignmentId: u.assignmentId,
+            quantity: u.newEntry.quantity,
+            notes: u.newEntry.notes,
+            newTotalCompleted: u.newTotalCompleted,
+            newStatus: u.newStatus,
+            glass_item_id: u.glass_item_id,
+            frosting_name: u.frosting_name
+          })),
+          updatedOrder: filteredUpdatedOrder,
+          customerName: orderData.customer_name,
+          dispatcherName: orderData.dispatcher_name,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      setSuccessMessage('Frosting quantities updated!');
+      setTimeout(() => {
+        onUpdate?.(filteredUpdatedOrder);
+        onClose();
+      }, 1500);
+    } catch (err) {
+      console.error('❌ Error in frosting save:', err);
+      setError(err?.response?.data?.message || err.message || 'Failed to update frosting');
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const ProgressBar = ({ assignment, todayQty }) => {
     const currentProgress = calculateProgress(assignment);

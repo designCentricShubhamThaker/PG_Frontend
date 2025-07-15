@@ -8,10 +8,10 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
-import CapOrders from '../pages/CapOrders.jsx';
+import GlassOrders from '../pages/GlassOrders.jsx';
+import AccessoriesOrders from '../pages/AccessoriesOrders.jsx';
 
-
-const CapDashboard = () => {
+const AccessoriesDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
@@ -134,7 +134,7 @@ const CapDashboard = () => {
               </button>
             ) : null}
             <div className="text-xl font-bold">
-              <span className="text-black">Welcome</span> <span className="text-orange-500">Cap Team !</span>
+              <span className="text-black">Welcome</span> <span className="text-orange-500">Accessories Team !</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -149,9 +149,9 @@ const CapDashboard = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <CapOrders orderType="pending" />
+             <AccessoriesOrders orderType="pending" />
             ) : (
-             <CapOrders orderType="completed"/>
+             <AccessoriesOrders orderType="completed"/>
             )}
           </div>
         </main>
@@ -160,4 +160,4 @@ const CapDashboard = () => {
   );
 };
 
-export default CapDashboard;
+export default AccessoriesDashboard;

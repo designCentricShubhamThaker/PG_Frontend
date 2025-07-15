@@ -125,7 +125,6 @@ const DispatcherOrders = ({ orderType }) => {
     return order.item_ids.length;
   };
 
-  // FIXED: Correct calculation of completed items
   const calculateCompletedItems = (order) => {
     if (!order.item_ids || !Array.isArray(order.item_ids)) {
       return 0;
@@ -136,34 +135,47 @@ const DispatcherOrders = ({ orderType }) => {
     order.item_ids.forEach((item) => {
       const assignments = item.team_assignments;
       if (!assignments || typeof assignments !== 'object') {
-        return; // Skip this item if no assignments
-      }
-
-      // Collect ALL assignments from ALL teams for this specific item
-      let allAssignmentsForThisItem = [];
-
-      // Loop through each team (glass, caps, boxes, pumps, etc.)
-      Object.keys(assignments).forEach(teamName => {
-        const teamAssignments = assignments[teamName];
-        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
-          // Add all assignments from this team to our collection
-          allAssignmentsForThisItem.push(...teamAssignments);
-        }
-      });
-
-      // If this item has no assignments at all, skip it
-      if (allAssignmentsForThisItem.length === 0) {
         return;
       }
 
-      // Now check if EVERY SINGLE assignment for this item is completed
-      const isThisItemCompleted = allAssignmentsForThisItem.every(assignment => {
-        const completedQty = assignment.team_tracking?.total_completed_qty || 0;
-        const requiredQty = assignment.quantity || 0;
-        return completedQty >= requiredQty;
+      let allAssignmentsForThisItem = [];
+      let isThisItemCompleted = true;
+
+      // Check each team's assignments
+      Object.keys(assignments).forEach(teamName => {
+        const teamAssignments = assignments[teamName];
+        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
+          allAssignmentsForThisItem.push(...teamAssignments);
+          const teamCompleted = teamAssignments.every(assignment => {
+            if (teamName === 'caps') {
+              const requiredQty = assignment.quantity || 0;
+              const hasAssembly = assignment.process && assignment.process.includes('Assembly');
+
+              if (hasAssembly) {
+                const metalCompleted = assignment.metal_tracking?.total_completed_qty || 0;
+                const assemblyCompleted = assignment.assembly_tracking?.total_completed_qty || 0;
+                return metalCompleted >= requiredQty && assemblyCompleted >= requiredQty;
+              } else {
+                const metalCompleted = assignment.metal_tracking?.total_completed_qty || 0;
+                return metalCompleted >= requiredQty;
+              }
+            } else {
+              const completedQty = assignment.team_tracking?.total_completed_qty || 0;
+              const requiredQty = assignment.quantity || 0;
+              return completedQty >= requiredQty;
+            }
+          });
+
+          if (!teamCompleted) {
+            isThisItemCompleted = false;
+          }
+        }
       });
 
-      // If all assignments for this item are completed, count it
+      if (allAssignmentsForThisItem.length === 0) {
+        isThisItemCompleted = false;
+      }
+
       if (isThisItemCompleted) {
         completedItemsCount++;
       }
@@ -172,64 +184,15 @@ const DispatcherOrders = ({ orderType }) => {
     return completedItemsCount;
   };
 
-  // FIXED: Correct calculation of completion percentage
   const calculateCompletionPercentage = (order) => {
     if (!order || !order.item_ids || !Array.isArray(order.item_ids) || order.item_ids.length === 0) {
       return 0;
     }
-
     const totalItems = order.item_ids.length;
     const completedItems = calculateCompletedItems(order);
-
     if (totalItems === 0) return 0;
-
     const percentage = Math.round((completedItems / totalItems) * 100);
     return Math.min(percentage, 100);
-  };
-
-  // Enhanced debug function
-  const debugProgressCalculation = (order) => {
-    console.log(`\n=== DEBUG: Order ${order.order_number} ===`);
-    console.log(`Total items: ${order.item_ids.length}`);
-
-    order.item_ids.forEach((item, index) => {
-      console.log(`\nItem ${index + 1} (${item.name}):`);
-
-      const assignments = item.team_assignments;
-      if (!assignments || typeof assignments !== 'object') {
-        console.log('  No assignments found');
-        return;
-      }
-
-      let allAssignments = [];
-
-      Object.keys(assignments).forEach(teamName => {
-        const teamAssignments = assignments[teamName];
-        if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
-          console.log(`  ${teamName}: ${teamAssignments.length} assignments`);
-          teamAssignments.forEach(assignment => {
-            const completed = assignment.team_tracking?.total_completed_qty || 0;
-            const required = assignment.quantity || 0;
-            console.log(`    - ${assignment.glass_name || assignment.box_name || assignment.cap_name || assignment.pump_name || 'Assignment'}: ${completed}/${required} ${completed >= required ? '✓' : '✗'}`);
-          });
-          allAssignments.push(...teamAssignments);
-        }
-      });
-
-      const itemCompleted = allAssignments.every(assignment => {
-        const completed = assignment.team_tracking?.total_completed_qty || 0;
-        const required = assignment.quantity || 0;
-        return completed >= required;
-      });
-
-      console.log(`  Item ${index + 1} completed: ${itemCompleted ? '✓' : '✗'} (${allAssignments.length} total assignments)`);
-    });
-
-    const completedItems = calculateCompletedItems(order);
-    const percentage = calculateCompletionPercentage(order);
-    console.log(`\nCompleted items: ${completedItems}/${order.item_ids.length}`);
-    console.log(`Progress: ${percentage}%`);
-    console.log(`=== END DEBUG ===\n`);
   };
 
   const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
@@ -256,7 +219,6 @@ const DispatcherOrders = ({ orderType }) => {
   const handleProgressUpdate = useCallback((progressData) => {
     console.log('📈 Received progress update:', progressData);
     const orderNumber = progressData.orderNumber || progressData.order_number;
-
     if (!orderNumber) {
       console.warn('No order number in progress update');
       return;
@@ -298,30 +260,72 @@ const DispatcherOrders = ({ orderType }) => {
                 mergedAssignments[team] = mergedTeamAssignments;
               });
 
-              // ✅ ✅ ✅ ADD THIS BLOCK BELOW TO CALCULATE item_status
-              const isItemCompleted = Object.values(mergedAssignments).flat().every(assign => {
-                const completedQty = assign.team_tracking?.total_completed_qty || 0;
-                const requiredQty = assign.quantity || 0;
-                return completedQty >= requiredQty;
+              // Enhanced completion check that handles both standard and cap tracking
+              const isItemCompleted = Object.entries(mergedAssignments).every(([teamName, assignments]) => {
+                return assignments.every(assign => {
+                  // Handle cap team with metal_tracking and assembly_tracking
+                  if (teamName === 'caps') {
+                    const requiredQty = assign.quantity || 0;
+
+                    // Check if cap has assembly process
+                    const hasAssembly = assign.process && assign.process.includes('Assembly');
+
+                    if (hasAssembly) {
+                      // For assembly caps, both metal and assembly must be completed
+                      const metalCompleted = assign.metal_tracking?.total_completed_qty || 0;
+                      const assemblyCompleted = assign.assembly_tracking?.total_completed_qty || 0;
+
+                      // Item is completed when both processes reach required quantity
+                      return metalCompleted >= requiredQty && assemblyCompleted >= requiredQty;
+                    } else {
+                      // For non-assembly caps, only metal process needs completion
+                      const metalCompleted = assign.metal_tracking?.total_completed_qty || 0;
+                      return metalCompleted >= requiredQty;
+                    }
+                  } else {
+                    // Handle standard team tracking for other teams
+                    const completedQty = assign.team_tracking?.total_completed_qty || 0;
+                    const requiredQty = assign.quantity || 0;
+                    return completedQty >= requiredQty;
+                  }
+                });
               });
 
               return {
                 ...existingItem,
                 ...updatedItem,
                 team_assignments: mergedAssignments,
-                item_status: isItemCompleted ? 'Completed' : 'Pending' // ✅ Add this field to the item
+                item_status: isItemCompleted ? 'Completed' : 'Pending'
               };
             })
-
-
           };
 
-          // Debug the progress calculation
-          console.log(`\n🔍 Debugging progress for order ${orderNumber}:`);
-          debugProgressCalculation(mergedOrder);
+          // Calculate completion using the enhanced logic
+          const completedItems = mergedOrder.item_ids.filter(item => {
+            return Object.entries(item.team_assignments || {}).every(([teamName, assignments]) => {
+              return assignments.every(assign => {
+                if (teamName === 'caps') {
+                  const requiredQty = assign.quantity || 0;
+                  const hasAssembly = assign.process && assign.process.includes('Assembly');
 
-          const completedItems = calculateCompletedItems(mergedOrder);
-          const totalItems = calculateTotalItems(mergedOrder);
+                  if (hasAssembly) {
+                    const metalCompleted = assign.metal_tracking?.total_completed_qty || 0;
+                    const assemblyCompleted = assign.assembly_tracking?.total_completed_qty || 0;
+                    return metalCompleted >= requiredQty && assemblyCompleted >= requiredQty;
+                  } else {
+                    const metalCompleted = assign.metal_tracking?.total_completed_qty || 0;
+                    return metalCompleted >= requiredQty;
+                  }
+                } else {
+                  const completedQty = assign.team_tracking?.total_completed_qty || 0;
+                  const requiredQty = assign.quantity || 0;
+                  return completedQty >= requiredQty;
+                }
+              });
+            });
+          }).length;
+
+          const totalItems = mergedOrder.item_ids.length;
           const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
           const previousStatus = order.order_status;
@@ -352,7 +356,6 @@ const DispatcherOrders = ({ orderType }) => {
       saveOrdersToLocalStorage(updatedOrders, orderType, 'dispatcher');
       return updatedOrders;
     });
-
   }, [orderType]);
 
   useEffect(() => {
@@ -426,7 +429,7 @@ const DispatcherOrders = ({ orderType }) => {
 
   const handleCreateOrder = async () => {
     await fetchOrders(orderType);
-    
+
   };
 
   const handleDelete = async (orderId) => {

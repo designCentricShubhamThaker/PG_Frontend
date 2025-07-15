@@ -22,13 +22,13 @@ const AddNEwAccessoriesChild = ({
       if (editingBottle) {
         setFormData({
           name: editingBottle.name || '',
-          neck: editingBottle.neck || '',
+        
 
         });
       } else {
         setFormData({
            name: "",
-    neck: ""
+  
         });
       }
       setError('');

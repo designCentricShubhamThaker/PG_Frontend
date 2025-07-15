@@ -52,7 +52,7 @@ const AddNewCap = () => {
     debounceSearch(searchTerm);
   }, [searchTerm, debounceSearch]);
 
-  // Load cap data on component mount only if not already loaded
+  // Load pump data on component mount only if not already loaded
   useEffect(() => {
     if (bottles.length === 0) {
       loadItems(ITEM_TYPE);
@@ -83,8 +83,8 @@ const AddNewCap = () => {
   };
 
   const handleSubmit = async (formData) => {
-    if (!formData.FORMULA?.trim()) {
-      throw new Error('Formula is required');
+    if (!formData.FORMULA.trim()) {
+      throw new Error('Name is required');
     }
 
     try {
@@ -107,7 +107,7 @@ const AddNewCap = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this cap?')) {
+    if (window.confirm('Are you sure you want to delete this pump?')) {
       try {
         await deleteItem(ITEM_TYPE, id);
       } catch (err) {
@@ -135,7 +135,7 @@ const AddNewCap = () => {
           className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
         >
           <Plus size={16} />
-          New Cap
+          New cap
         </button>
 
         <div className="relative">
@@ -161,9 +161,7 @@ const AddNewCap = () => {
           <table className="w-full min-w-full rounded-full">
             <thead className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] text-center font-bold text-sm text-white sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-3 text-left text-sm font-medium">Co Item No</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">Formula</th>
-                <th className="px-2 py-3 text-left text-sm font-medium">Neck Diam</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Cap Name</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Edit</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Delete</th>
               </tr>
@@ -176,9 +174,7 @@ const AddNewCap = () => {
 
                 return (
                   <tr key={bottle._id} className={rowBgColor}>
-                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.CO_ITEM_NO || '-'}</td>
                     <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.FORMULA || '-'}</td>
-                    <td className="px-2 py-3 text-xs text-left text-[#703800]">{bottle.NECK_DIAM || '-'}</td>
                     <td className="px-2 py-3">
                       <button
                         onClick={() => handleEdit(bottle)}
@@ -205,7 +201,7 @@ const AddNewCap = () => {
 
           {currentBottles.length === 0 && (
             <div className="text-center py-8 text-gray-500 text-sm">
-              No caps found
+              No pumps found
             </div>
           )}
         </div>

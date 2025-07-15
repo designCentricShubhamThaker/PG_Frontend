@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { X, Save, CloudHail } from 'lucide-react';
@@ -5,13 +6,12 @@ import axios from 'axios';
 import {
     TEAMS,
     saveOrdersToLocalStorage,
-    getOrdersFromLocalStorage,
+    getOrdersFromLocalStorage
 } from '../utils/localStorageUtils';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
-import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
 
-const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
+const UpdateAccessoriesQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -20,8 +20,8 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const { notifyProgressUpdate } = useSocket()
 
     useEffect(() => {
-        if (isOpen && itemData?.team_assignments?.printing) {
-            setAssignments(itemData.team_assignments.printing.map(assignment => ({
+        if (isOpen && itemData?.team_assignments?.accessories) {
+            setAssignments(itemData.team_assignments.accessories.map(assignment => ({
                 ...assignment,
                 todayQty: 0,
                 notes: ''
@@ -69,10 +69,10 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         return Math.max(total - completed, 0);
     };
 
-    const updateTeamOrderLocal = (updatedOrder, team) => {
+    const updateLocalStorageWithOrder = (updatedOrder) => {
         try {
-            const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending';
-            const existingOrders = getOrdersFromLocalStorage(orderType, team);
+            const orderType = updatedOrder.order_status === 'Completed' ? 'completed' : 'pending'
+            const existingOrders = getOrdersFromLocalStorage(orderType, TEAMS.ACCESSORIES);
             const orderIndex = existingOrders.findIndex(order => order._id === updatedOrder._id);
 
             if (orderIndex !== -1) {
@@ -81,185 +81,121 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 existingOrders.push(updatedOrder);
             }
 
-            saveOrdersToLocalStorage(existingOrders, orderType, team);
-            console.log(`✅ LocalStorage updated for ${team}`);
-        } catch (err) {
-            console.error(`❌ Failed to update localStorage for ${team}:`, err);
+            saveOrdersToLocalStorage(existingOrders, orderType, TEAMS.ACCESSORIES);
+
+            console.log('LocalStorage updated successfully');
+        } catch (error) {
+            console.error('Error updating localStorage:', error);
         }
     };
 
-
-
-    const preserveGlassItemDetails = (printingAssignment, allGlassAssignments) => {
-        const glassItemId = printingAssignment.glass_item_id?._id || printingAssignment.glass_item_id;
-        const fullGlassItem = allGlassAssignments.find(glassAssignment => {
-            const glassId = glassAssignment._id;
-            return glassId?.toString() === glassItemId?.toString();
-        });
-
-        if (fullGlassItem) {
-            return {
-                ...printingAssignment,
-                glass_item_id: fullGlassItem,
-                glass_name: fullGlassItem.glass_name,
-                weight: fullGlassItem.weight,
-                neck_size: fullGlassItem.neck_size,
-                decoration: fullGlassItem.decoration,
-                decoration_details: fullGlassItem.decoration_details
-            };
-        }
-        return printingAssignment;
-    };
-
-   
     const handleSave = async () => {
-    try {
-        setLoading(true);
-        setError(null);
+        try {
+            setLoading(true);
+            setError(null);
 
-        const updates = assignments
-            .filter(assignment => assignment.todayQty > 0)
-            .map(assignment => {
-                const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
-                const newCompleted = currentCompleted + assignment.todayQty;
-                const newEntry = {
-                    date: new Date().toISOString(),
-                    quantity: assignment.todayQty,
-                    notes: assignment.notes || '',
-                    operator: user.name || 'Current User'
-                };
+            const updates = assignments
+                .filter(assignment => assignment.todayQty > 0)
+                .map(assignment => {
+                    const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
+                    const newCompleted = currentCompleted + assignment.todayQty;
 
-                return {
-                    assignmentId: assignment._id,
-                    newEntry,
-                    newTotalCompleted: newCompleted,
-                    newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
-                    glass_item_id: assignment.glass_item_id,
-                    printing_name: assignment.printing_name,
-                    quantity: assignment.quantity
-                };
-            });
+                    const newEntry = {
+                        date: new Date().toISOString(),
+                        quantity: assignment.todayQty,
+                        notes: assignment.notes || '',
+                        operator: 'Current User'
+                    };
 
-        if (updates.length === 0) {
-            setError('Please enter quantity for at least one assignment');
-            setLoading(false);
-            return;
-        }
+                    return {
+                        assignmentId: assignment._id,
+                        newEntry,
+                        newTotalCompleted: newCompleted,
+                        newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
+                        accessories_name: assignment.accessories_name,
+                        quantity: assignment.quantity,
+                        accessoriesItemId: assignment._id
+                    };
+                });
 
-        for (let i = 0; i < updates.length; i++) {
-            const assignment = assignments[i];
-            const remaining = getRemainingQty(assignment);
-
-            if (assignment.todayQty > remaining) {
-                setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
+            if (updates.length === 0) {
+                setError('Please enter quantity for at least one assignment');
                 setLoading(false);
                 return;
             }
-        }
 
-        const response = await axios.patch('http://localhost:5000/api/print', {
-            orderNumber: orderData.order_number,
-            itemId: itemData._id,
-            updates
-        });
+            for (let i = 0; i < updates.length; i++) {
+                const assignment = assignments[i];
+                const remaining = getRemainingQty(assignment);
 
-        if (!response.data.success) throw new Error(response.data.message || 'Update failed');
+                if (assignment.todayQty > remaining) {
+                    setError(`Quantity for ${assignment.accessories_name} exceeds remaining amount (${remaining})`);
+                    setLoading(false);
+                    return;
+                }
+            }
 
-        const updatedOrder = response.data.data.order;
-
-        const targetAssignment = updates[0]; // use first assignment regardless of status
-        const targetGlassItem = targetAssignment?.glass_item_id;
-
-        const filteredUpdatedOrder = {
-            ...updatedOrder,
-            item_ids: updatedOrder.item_ids.map(item => {
-                const glassAssignments = item.team_assignments?.glass || [];
-
-                const completedGlass = glassAssignments.filter(g =>
-                    g.team_tracking?.total_completed_qty >= g.quantity
-                );
-
-                const validPrinting = (item.team_assignments?.printing || [])
-                    .filter(p => {
-                        const glassId = p.glass_item_id?._id || p.glass_item_id;
-
-                        const isGlassDone = glassAssignments.some(g =>
-                            g._id?.toString() === glassId?.toString() &&
-                            g.team_tracking?.total_completed_qty >= g.quantity
-                        );
-
-                        const prevDone = isPreviousTeamsCompleted(item, 'printing', glassId);
-
-                        return isGlassDone && prevDone;
-                    })
-                    .map(p => preserveGlassItemDetails(p, glassAssignments));
-
-                return {
-                    ...item,
-                    team_assignments: {
-                        ...item.team_assignments,
-                        glass: completedGlass,
-                        printing: validPrinting
-                    }
-                };
-            }).filter(item => item.team_assignments?.printing?.length > 0)
-        };
-
-        updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.PRINTING);
-
-        if (notifyProgressUpdate && targetGlassItem) {
-            const glassItemId = targetGlassItem?._id || targetGlassItem;
-
-            notifyProgressUpdate({
+            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/accessories', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
+            const response = await axios.patch('http://localhost:5000/api/accessories', {
                 orderNumber: orderData.order_number,
-                itemName: itemData.name,
-                team: user.team,
-                updateSource: 'printing_update',
-                targetGlassItem: glassItemId,
-                hasCompletedWork: updates.some(u => u.newStatus === 'Completed'),
-                updates: updates.map(u => ({
-                    assignmentId: u.assignmentId,
-                    quantity: u.newEntry.quantity,
-                    notes: u.newEntry.notes,
-                    newTotalCompleted: u.newTotalCompleted,
-                    newStatus: u.newStatus,
-                    glass_item_id: u.glass_item_id,
-                    printing_name: u.printing_name
-                })),
-                updatedOrder: filteredUpdatedOrder,
-                customerName: orderData.customer_name,
-                dispatcherName: orderData.dispatcher_name,
-                timestamp: new Date().toISOString()
+                itemId: itemData._id,
+                updates
             });
+
+            if (response.data.success) {
+                const updatedOrder = response.data.data.order;
+                updateLocalStorageWithOrder(updatedOrder);
+
+
+                if (notifyProgressUpdate) {
+                    notifyProgressUpdate({
+                        orderNumber: orderData.order_number,
+                        itemName: itemData.name,
+                        team: user.team,
+                        updates: updates.map(update => ({
+                            assignmentId: update.assignmentId,
+                            quantity: update.newEntry.quantity,
+                            notes: update.newEntry.notes,
+                            newTotalCompleted: update.newTotalCompleted,
+                            newStatus: update.newStatus
+                        })),
+                        updatedOrder: updatedOrder,
+                        customerName: orderData.customer_name,
+                        dispatcherName: orderData.dispatcher_name,
+                        timestamp: new Date().toISOString() // ✅ ADD THIS
+                    });
+                }
+
+
+                setSuccessMessage('Quantities updated successfully!');
+
+                setTimeout(() => {
+                    onUpdate?.(updatedOrder);
+                    onClose();
+                }, 1500);
+            } else {
+                throw new Error(response.data.message || 'Update failed');
+            }
+        } catch (err) {
+            console.error('Error updating quantities:', err);
+
+            let errorMessage = 'Failed to update quantities';
+
+            if (err.response?.data?.message) {
+                errorMessage = err.response.data.message;
+            } else if (err.message) {
+                errorMessage = err.message;
+            }
+
+            setError(errorMessage);
+        } finally {
+            setLoading(false);
         }
-
-        console.log('✅ Printing update successful:', {
-            orderNumber: orderData.order_number,
-            team: user.team,
-            updatedCount: updates.length,
-            targetGlassItem: targetGlassItem,
-            totalPrintingAssignments: filteredUpdatedOrder.item_ids.reduce(
-                (count, item) => count + (item.team_assignments?.printing?.length || 0),
-                0
-            )
-        });
-
-        setSuccessMessage('Printing quantities updated!');
-        setTimeout(() => {
-            onUpdate?.(filteredUpdatedOrder);
-            onClose();
-        }, 1500);
-    } catch (err) {
-        console.error('❌ Error in printing save:', err);
-        setError(err?.response?.data?.message || err.message || 'Failed to update printing');
-    } finally {
-        setLoading(false);
-    }
-};
-
-
-
-
+    };
 
     const ProgressBar = ({ assignment, todayQty }) => {
         const currentProgress = calculateProgress(assignment);
@@ -302,7 +238,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         <div className="bg-orange-600 text-white px-4 py-3 flex justify-between gap-4 rounded-md">
                             <div>
                                 <DialogTitle as="h2" className="text-xl font-bold">
-                                    Update Glass Production
+                                    Update accessories Production
                                     <p className="text-orange-100 text-sm">
                                         Order #{orderData?.order_number} - {itemData?.name}
                                     </p>
@@ -335,11 +271,10 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         <div className="bg-gradient-to-r from-orange-800 via-orange-600 to-orange-400 px-4 py-3 mt-6 rounded-md">
                             <div className="grid gap-4 text-white font-semibold text-sm items-center"
                                 style={{
-                                    gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr 1.5fr'
+                                    gridTemplateColumns: '2fr 2fr 2fr 3fr 2fr'
                                 }}>
-                                <div className="text-left">Bottle Name</div>
-                                <div className="text-center">Neck Size</div>
-                                <div className="text-center">Weight</div>
+                                <div className="text-left">Accessories Name</div>
+                               
                                 <div className="text-center">Total Qty</div>
                                 <div className="text-center">Remaining</div>
                                 <div className="text-center">Progress</div>
@@ -360,25 +295,17 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                                         className={`border-b border-orange-100 px-6 py-4 ${bgColor} -mx-6 mb-4 last:mb-0`}>
                                         <div className="grid gap-4 text-sm items-center"
                                             style={{
-                                                gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr 1.5fr'
+                                                gridTemplateColumns: '2fr 2fr 2fr 3fr 2fr '
                                             }}>
 
                                             <div className="text-left">
-                                                <div className="font-medium text-orange-900">{assignment.glass_name}</div>
+                                                <div className="font-medium text-orange-900">{assignment.accessories_name}</div>
                                                 <div className="text-xs text-gray-600">
                                                     {assignment.decoration} #{assignment.decoration_no}
                                                 </div>
                                             </div>
 
-                                            <div className="text-center text-orange-900">
-                                                {assignment.neck_size}mm
-                                            </div>
-
-
-                                            <div className="text-center text-orange-900">
-                                                {assignment.weight}ml
-                                            </div>
-
+                                           
                                             <div className="text-center text-orange-900 font-medium">
                                                 {assignment.quantity}
                                             </div>
@@ -464,4 +391,4 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     );
 };
 
-export default UpdatePrintQty;
+export default UpdateAccessoriesQty;

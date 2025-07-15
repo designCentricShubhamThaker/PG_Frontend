@@ -42,36 +42,42 @@ export const handleSubmitOrder = async ({
       const validPumpItems = item.teamAssignments.pumps.filter(
         (pump) => pump.pump_name !== "N/A" && pump.pump_name !== "" && pump.quantity
       );
+      const validAccessoriesItems = item.teamAssignments.accessories.filter(
+        (acc) =>
+          acc.accessories_name !== "N/A" &&
+          acc.accessories_name !== "" &&
+          acc.quantity
+      );
 
       if (
         validGlassItems.length > 0 ||
         validCapItems.length > 0 ||
         validBoxItems.length > 0 ||
-        validPumpItems.length > 0
+        validPumpItems.length > 0 ||
+        validAccessoriesItems.length > 0
       ) {
         hasValidItems = true;
 
         formattedItems.push({
           name: item.name,
-          glass: validGlassItems.map((glass) => {
-            // Parse decoration processes from the decoration key
-            const decorationKey = glass.decoration || "";
 
+          glass: validGlassItems.map((glass) => {
+            const decorationKey = glass.decoration || "";
             return {
               glass_name: glass.glass_name,
               quantity: parseInt(glass.quantity, 10) || 0,
               weight: glass.weight || "",
               neck_size: glass.neck_size || "",
-              decoration: decorationKey, // This is the key like "coating_printing_frosting"
+              decoration: decorationKey,
               decoration_no: glass.decoration_no || "",
+              rate: parseFloat(glass.rate) || 0,
               decoration_details: {
                 type: decorationKey,
                 decoration_number: glass.decoration_no || "",
-                coating: decorationKey.includes('coating'),
-                printing: decorationKey.includes('printing'),
-                foiling: decorationKey.includes('foiling'),
-                frosting: decorationKey.includes('frosting')
-
+                coating: decorationKey.includes("coating"),
+                printing: decorationKey.includes("printing"),
+                foiling: decorationKey.includes("foiling"),
+                frosting: decorationKey.includes("frosting")
               },
               team: glass.team || "Glass Manufacturing - Mumbai",
               status: "Pending",
@@ -89,6 +95,7 @@ export const handleSubmitOrder = async ({
             quantity: parseInt(cap.quantity, 10) || 0,
             process: cap.process || "",
             material: cap.material || "",
+            rate: parseFloat(cap.rate) || 0,
             team: cap.team || "Cap Manufacturing - Delhi",
             status: "Pending",
             team_tracking: {
@@ -101,6 +108,7 @@ export const handleSubmitOrder = async ({
           boxes: validBoxItems.map((box) => ({
             box_name: box.box_name,
             quantity: parseInt(box.quantity, 10) || 0,
+            rate: parseFloat(box.rate) || 0,
             approval_code: box.approval_code || "",
             team: box.team || "Box Manufacturing - Bangalore",
             status: "Pending",
@@ -115,7 +123,21 @@ export const handleSubmitOrder = async ({
             pump_name: pump.pump_name,
             neck_type: pump.neck_type || "",
             quantity: parseInt(pump.quantity, 10) || 0,
+            rate: parseFloat(pump.rate) || 0,
             team: pump.team || "Pump Manufacturing - Chennai",
+            status: "Pending",
+            team_tracking: {
+              total_completed_qty: 0,
+              completed_entries: [],
+              status: "Pending"
+            }
+          })),
+
+          accessories: validAccessoriesItems.map((acc) => ({
+            accessories_name: acc.accessories_name,
+            quantity: parseInt(acc.quantity, 10) || 0,
+            rate: parseFloat(acc.rate) || 0,
+            team: acc.team || "Accessory Manufacturing - Pune",
             status: "Pending",
             team_tracking: {
               total_completed_qty: 0,
@@ -128,7 +150,7 @@ export const handleSubmitOrder = async ({
     }
 
     if (!hasValidItems) {
-      setError("Please add at least one valid item (glass, cap, box, or pump) with quantity");
+      setError("Please add at least one valid item (glass, cap, box, pump, or accessories) with quantity");
       setIsSubmitting(false);
       return;
     }
@@ -140,6 +162,7 @@ export const handleSubmitOrder = async ({
       order_status: "Pending",
       items: formattedItems
     };
+
     if (isConnected) {
       try {
         const response = await axios.post("http://localhost:5000/api/orders", orderData, {
@@ -151,33 +174,20 @@ export const handleSubmitOrder = async ({
         if (response.data.success) {
           console.log("Order created successfully:", response.data);
           addOrderToLocalStorage(response.data.data);
-          if (notifyTeam) {
-            notifyTeam(response.data.data);
-          }
-          if (onCreateOrder) {
-            onCreateOrder(response.data.data);
-          }
+          if (notifyTeam) notifyTeam(response.data.data);
+          if (onCreateOrder) onCreateOrder(response.data.data);
           resetForm();
-          if (onClose) {
-            onClose();
-          }
-
+          if (onClose) onClose();
           setError("");
         } else {
           setError(response.data.message || "Failed to create order");
         }
       } catch (apiError) {
         console.error("API Error:", apiError);
-        if (apiError.response?.data?.message) {
-          setError(apiError.response.data.message);
-        } else {
-          setError("Failed to create order. Please try again.");
-        }
+        setError(apiError.response?.data?.message || "Failed to create order. Please try again.");
       }
     } else {
-      if (onClose) {
-        onClose();
-      }
+      if (onClose) onClose();
       setError("");
     }
 
@@ -188,6 +198,4 @@ export const handleSubmitOrder = async ({
     setIsSubmitting(false);
   }
 };
-
-
 

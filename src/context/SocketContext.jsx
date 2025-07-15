@@ -58,7 +58,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         try {
@@ -102,7 +102,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         const storageKey = typeMapping[type];
@@ -138,7 +138,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         const endpoint = typeMapping[type];
@@ -171,7 +171,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         const endpoint = typeMapping[type];
@@ -209,7 +209,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         const endpoint = typeMapping[type];
@@ -251,7 +251,7 @@ export const SocketProvider = ({ children }) => {
                 pumps: 'pumpdata',
                 caps: 'capdata', 
                 glass: 'bottledata',
-                accessories: 'accessories'
+                accessories: 'accessoriesData'
             };
 
             const endpoint = typeMapping[type];
@@ -288,7 +288,7 @@ export const SocketProvider = ({ children }) => {
             pumps: 'pumpdata',
             caps: 'capdata', 
             glass: 'bottledata',
-            accessories: 'accessories'
+            accessories: 'accessoriesData'
         };
 
         Object.values(typeMapping).forEach(key => {
