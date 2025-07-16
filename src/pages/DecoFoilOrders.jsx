@@ -74,107 +74,107 @@ const DecoFoilOrders = ({ orderType }) => {
     };
 
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
-  console.log('🔧 Merging item assignments:', {
-    itemName: existingItem.name,
-    targetGlassItem,
-    existingGlassAssignments: existingItem.team_assignments?.glass?.length || 0,
-    newGlassAssignments: newItem.team_assignments?.glass?.length || 0,
-    existingFoilingAssignments: existingItem.team_assignments?.foiling?.length || 0,
-    newFoilingAssignments: newItem.team_assignments?.foiling?.length || 0,
-  });
+        console.log('🔧 Merging item assignments:', {
+            itemName: existingItem.name,
+            targetGlassItem,
+            existingGlassAssignments: existingItem.team_assignments?.glass?.length || 0,
+            newGlassAssignments: newItem.team_assignments?.glass?.length || 0,
+            existingFoilingAssignments: existingItem.team_assignments?.foiling?.length || 0,
+            newFoilingAssignments: newItem.team_assignments?.foiling?.length || 0,
+        });
 
-  const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
-  
-  console.log('✅ Merge result:', {
-    itemName: result.name,
-    finalGlassAssignments: result.team_assignments?.glass?.length || 0,
-    finalFoilingAssignments: result.team_assignments?.foiling?.length || 0,
-  });
+        const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
 
-  return result;
-};
+        console.log('✅ Merge result:', {
+            itemName: result.name,
+            finalGlassAssignments: result.team_assignments?.glass?.length || 0,
+            finalFoilingAssignments: result.team_assignments?.foiling?.length || 0,
+        });
+
+        return result;
+    };
 
     const handleNewOrder = useCallback((orderData) => {
-  if (!orderData.orderData) return;
-  const newOrder = orderData.orderData;
-  const targetGlassItem = orderData.targetGlassItem;
+        if (!orderData.orderData) return;
+        const newOrder = orderData.orderData;
+        const targetGlassItem = orderData.targetGlassItem;
 
-  console.log('🔍 New foiling order received:', {
-    orderNumber: newOrder.order_number,
-    targetGlassItem,
-    hasTargetGlass: !!targetGlassItem,
-    totalItems: newOrder.item_ids?.length || 0,
-    itemsWithGlass: newOrder.item_ids?.filter(item => 
-      item.team_assignments?.glass?.length > 0
-    ).length || 0,
-    itemsWithFoiling: newOrder.item_ids?.filter(item => 
-      item.team_assignments?.foiling?.length > 0
-    ).length || 0,
-  });
+        console.log('🔍 New foiling order received:', {
+            orderNumber: newOrder.order_number,
+            targetGlassItem,
+            hasTargetGlass: !!targetGlassItem,
+            totalItems: newOrder.item_ids?.length || 0,
+            itemsWithGlass: newOrder.item_ids?.filter(item =>
+                item.team_assignments?.glass?.length > 0
+            ).length || 0,
+            itemsWithFoiling: newOrder.item_ids?.filter(item =>
+                item.team_assignments?.foiling?.length > 0
+            ).length || 0,
+        });
 
-  // Log each item's assignments
-  newOrder.item_ids?.forEach(item => {
-    console.log(`📋 Item ${item.name} assignments:`, {
-      glass: item.team_assignments?.glass?.length || 0,
-      foiling: item.team_assignments?.foiling?.length || 0,
-    });
-  });
+        // Log each item's assignments
+        newOrder.item_ids?.forEach(item => {
+            console.log(`📋 Item ${item.name} assignments:`, {
+                glass: item.team_assignments?.glass?.length || 0,
+                foiling: item.team_assignments?.foiling?.length || 0,
+            });
+        });
 
-  if (!hasfoilingAssignments(newOrder)) {
-    console.log('Order has no foiling assignments, ignoring');
-    return;
-  }
-
-  const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
-  const currentViewType = orderType.toLowerCase();
-
-  if (orderStatus !== currentViewType) {
-    console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-    return;
-  }
-
-  setOrders(prevOrders => {
-    const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-    let updatedOrders;
-
-    if (existingOrderIndex >= 0) {
-      // Merge with existing order
-      const existingOrder = prevOrders[existingOrderIndex];
-      console.log('🔄 Merging with existing order:', {
-        existing: {
-          itemCount: existingOrder.item_ids?.length || 0,
-          itemsWithGlass: existingOrder.item_ids?.filter(item => 
-            item.team_assignments?.glass?.length > 0
-          ).length || 0,
-        },
-        new: {
-          itemCount: newOrder.item_ids?.length || 0,
-          itemsWithGlass: newOrder.item_ids?.filter(item => 
-            item.team_assignments?.glass?.length > 0
-          ).length || 0,
+        if (!hasfoilingAssignments(newOrder)) {
+            console.log('Order has no foiling assignments, ignoring');
+            return;
         }
-      });
 
-      const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
-      
-      console.log('✅ Merge completed:', {
-        finalItemCount: mergedOrder.item_ids?.length || 0,
-        finalItemsWithGlass: mergedOrder.item_ids?.filter(item => 
-          item.team_assignments?.glass?.length > 0
-        ).length || 0,
-      });
+        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
 
-      updatedOrders = [...prevOrders];
-      updatedOrders[existingOrderIndex] = mergedOrder;
-    } else {
-      updatedOrders = [newOrder, ...prevOrders];
-      console.log('✅ Added new order:', newOrder.order_number);
-    }
+        if (orderStatus !== currentViewType) {
+            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+            return;
+        }
 
-    saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
-    return updatedOrders;
-  });
-}, [orderType]);
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+            let updatedOrders;
+
+            if (existingOrderIndex >= 0) {
+                // Merge with existing order
+                const existingOrder = prevOrders[existingOrderIndex];
+                console.log('🔄 Merging with existing order:', {
+                    existing: {
+                        itemCount: existingOrder.item_ids?.length || 0,
+                        itemsWithGlass: existingOrder.item_ids?.filter(item =>
+                            item.team_assignments?.glass?.length > 0
+                        ).length || 0,
+                    },
+                    new: {
+                        itemCount: newOrder.item_ids?.length || 0,
+                        itemsWithGlass: newOrder.item_ids?.filter(item =>
+                            item.team_assignments?.glass?.length > 0
+                        ).length || 0,
+                    }
+                });
+
+                const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
+
+                console.log('✅ Merge completed:', {
+                    finalItemCount: mergedOrder.item_ids?.length || 0,
+                    finalItemsWithGlass: mergedOrder.item_ids?.filter(item =>
+                        item.team_assignments?.glass?.length > 0
+                    ).length || 0,
+                });
+
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+            } else {
+                updatedOrders = [newOrder, ...prevOrders];
+                console.log('✅ Added new order:', newOrder.order_number);
+            }
+
+            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.FOILING);
+            return updatedOrders;
+        });
+    }, [orderType]);
 
     // ✅ FIXED: Proper merge logic that handles both filtered and full orders
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
@@ -275,7 +275,7 @@ const DecoFoilOrders = ({ orderType }) => {
         };
     };
 
-   
+
     const handleOrderUpdate = useCallback((updateData) => {
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
@@ -362,6 +362,19 @@ const DecoFoilOrders = ({ orderType }) => {
             socket.off('order-deleted', handleOrderDeleted);
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+
+    useEffect(() => {
+           const handleBufferedOrder = (e) => {
+               console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
+               handleNewOrder(e.detail);
+           };
+   
+           window.addEventListener('socket-new-order', handleBufferedOrder);
+   
+           return () => {
+               window.removeEventListener('socket-new-order', handleBufferedOrder);
+           };
+       }, [handleNewOrder]);
 
     const fetchfoilingOrders = async (type = orderType) => {
         try {

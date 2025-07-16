@@ -11,6 +11,7 @@ import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 
 import TeamOrders from '../pages/TeamOrders.jsx';
 import DecoPrintOrders from '../pages/DecoPrintOrders.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const DecoPrintDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -18,6 +19,19 @@ const DecoPrintDashbaord = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout , user } = useAuth();
+    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+  
+    useEffect(() => {
+      if (activeTab === 'liveOrders') {
+        if (pendingOrderBuffer.printing.length > 0) {
+          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.printing.length);
+          pendingOrderBuffer.printing.forEach(order =>
+            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
+          );
+          clearTeamBuffer('printing');
+        }
+      }
+    }, [activeTab]);
 
   const handleLogout = () => {
     logout();

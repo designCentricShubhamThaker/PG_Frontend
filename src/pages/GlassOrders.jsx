@@ -27,6 +27,9 @@ const GlassOrders = ({ orderType }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
+    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+
+    
 
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
@@ -178,7 +181,7 @@ const GlassOrders = ({ orderType }) => {
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-            deleteOrderFromLocalStorage(orderId);
+          deleteOrderFromLocalStorage(orderId, TEAMS.GLASS); 
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
@@ -199,6 +202,23 @@ const GlassOrders = ({ orderType }) => {
 
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+
+useEffect(() => {
+    const team = 'glass';
+    const buffered = pendingOrderBuffer?.[team] || [];
+
+    if (buffered.length > 0) {
+        buffered.forEach(orderData => {
+            const eventName = orderData?.delete ? 'socket-order-deleted' : 'socket-new-order';
+            window.dispatchEvent(new CustomEvent(eventName, { detail: orderData }));
+        });
+
+        clearTeamBuffer(team);
+    }
+}, []);
+;
+
+
 
     const fetchGlassOrders = async (type = orderType) => {
         try {

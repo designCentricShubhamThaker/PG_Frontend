@@ -8,16 +8,28 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
-
-import TeamOrders from '../pages/TeamOrders.jsx';
 import DecoCoatOrders from '../pages/DecoCoatOrders.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const DecoCoatDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout , user } = useAuth();
+  const { logout, user } = useAuth();
+  const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+
+  useEffect(() => {
+    if (activeTab === 'liveOrders') {
+      if (pendingOrderBuffer.coating.length > 0) {
+        console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.coating.length);
+        pendingOrderBuffer.coating.forEach(order =>
+          window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
+        );
+        clearTeamBuffer('coating');
+      }
+    }
+  }, [activeTab]);
 
   const handleLogout = () => {
     logout();
@@ -150,9 +162,9 @@ const DecoCoatDashbaord = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <DecoCoatOrders orderType="pending" />
+              <DecoCoatOrders orderType="pending" />
             ) : (
-             <DecoCoatOrders orderType="completed"/>
+              <DecoCoatOrders orderType="completed" />
             )}
           </div>
         </main>

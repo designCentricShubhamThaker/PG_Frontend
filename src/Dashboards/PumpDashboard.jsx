@@ -10,6 +10,7 @@ import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 
 import PumpOrders from '../pages/PumpOrders.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 const PumpDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -17,6 +18,19 @@ const PumpDashboard = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout , user } = useAuth();
+    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+  
+    useEffect(() => {
+      if (activeTab === 'liveOrders') {
+        if (pendingOrderBuffer.pumps.length > 0) {
+          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.pumps.length);
+          pendingOrderBuffer.pumps.forEach(order =>
+            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
+          );
+          clearTeamBuffer('pumps');
+        }
+      }
+    }, [activeTab]);
 
   const handleLogout = () => {
     logout();

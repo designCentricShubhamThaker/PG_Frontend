@@ -9,13 +9,31 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 import GlassOrders from '../pages/GlassOrders.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
-const DispatcherDashboard = () => {
+
+const GlassDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
+  const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+
+  useEffect(() => {
+    if (activeTab === 'liveOrders') {
+      if (pendingOrderBuffer.glass.length > 0) {
+        console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.glass.length);
+        pendingOrderBuffer.glass.forEach(order =>
+          window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
+        );
+        clearTeamBuffer('glass');
+      }
+    }
+  }, [activeTab]);
+
+
+
 
   const handleLogout = () => {
     logout();
@@ -148,9 +166,9 @@ const DispatcherDashboard = () => {
             {activeTab === 'dashboard' ? (
               <DispatcherInventoryDashboard />
             ) : activeTab === 'liveOrders' ? (
-             <GlassOrders orderType="pending" />
+              <GlassOrders orderType="pending" />
             ) : (
-             <GlassOrders orderType="completed"/>
+              <GlassOrders orderType="completed" />
             )}
           </div>
         </main>
@@ -159,4 +177,4 @@ const DispatcherDashboard = () => {
   );
 };
 
-export default DispatcherDashboard;
+export default GlassDashboard;

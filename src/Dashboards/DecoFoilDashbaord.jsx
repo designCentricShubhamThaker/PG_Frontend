@@ -9,6 +9,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 import DecoFoilOrders from '../pages/DecoFoilOrders.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 
 
 const DecoFoilDashbaord = () => {
@@ -17,6 +18,19 @@ const DecoFoilDashbaord = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout , user } = useAuth();
+    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+  
+    useEffect(() => {
+      if (activeTab === 'liveOrders') {
+        if (pendingOrderBuffer.foiling.length > 0) {
+          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.foiling.length);
+          pendingOrderBuffer.foiling.forEach(order =>
+            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
+          );
+          clearTeamBuffer('foiling');
+        }
+      }
+    }, [activeTab]);
 
   const handleLogout = () => {
     logout();

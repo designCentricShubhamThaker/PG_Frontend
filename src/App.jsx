@@ -8,7 +8,6 @@ import CapDashboard from './Dashboards/CapDashboard.jsx';
 import GlassDashboard from './Dashboards/GlassDashboard.jsx';
 import PumpDashboard from './Dashboards/PumpDashboard.jsx';
 import BoxesDashboard from './Dashboards/BoxesDashboard.jsx';
-import StickerDashboard from './Dashboards/StickerDashboard.jsx';
 import DecoPrintDashboard from './Dashboards/DecoPrintDashboard.jsx';
 import DecoFrostDashboard from './Dashboards/DecoFrostDashboard.jsx';
 import DecoCoatDashboard from './Dashboards/DecoCoatDashboard.jsx';
@@ -17,6 +16,7 @@ import { SocketProvider } from './context/SocketContext.jsx';
 import SuperAdminDashboard from './Dashboards/SuperAdminDashboard.jsx';
 import TeamDashbaord from './Dashboards/TeamDashboard.jsx';
 import AccessoriesDashboard from './Dashboards/AccessoriesDashboard.jsx';
+
 // import LinerDashboard from './Dashboards/LinerDashboard';
 
 const App = () => {
@@ -24,6 +24,7 @@ const App = () => {
     <BrowserRouter>
       <AuthProvider>
         <SocketProvider>
+          {/* <GlobalTeamSocketListener /> */}
           <Routes>
 
             <Route path="/login" element={<Login />} />

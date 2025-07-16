@@ -203,7 +203,7 @@ const AccessoriesOrders = ({ orderType }) => {
 
             toast.success(`Order #${orderNumber} has been deleted`);
             console.log(`✅ Order #${orderNumber} removed from accessories team view`);
-            s
+            
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
@@ -221,6 +221,20 @@ const AccessoriesOrders = ({ orderType }) => {
             socket.off('order-deleted', handleOrderDeleted);
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+
+    useEffect(() => {
+        const handleBufferedOrder = (e) => {
+            console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
+            handleNewOrder(e.detail);
+        };
+
+        window.addEventListener('socket-new-order', handleBufferedOrder);
+
+        return () => {
+            window.removeEventListener('socket-new-order', handleBufferedOrder);
+        };
+    }, [handleNewOrder]);
+
 
     // FIXED: Function name changed from fetchGlassOrders to fetchBoxOrders
     const fetchBoxOrders = async (type = orderType) => {

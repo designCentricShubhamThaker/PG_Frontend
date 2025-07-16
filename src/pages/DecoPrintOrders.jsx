@@ -28,6 +28,8 @@ const DecoPrintOrders = ({ orderType }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
+    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
+
 
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
@@ -221,6 +223,7 @@ const DecoPrintOrders = ({ orderType }) => {
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
         return mergeItemAssignmentsSafe(existingItem, newItem, 'printing', targetGlassItem);
     };
+
     const handleOrderUpdate = useCallback((updateData) => {
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
@@ -307,6 +310,20 @@ const DecoPrintOrders = ({ orderType }) => {
             socket.off('order-deleted', handleOrderDeleted);
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+
+   useEffect(() => {
+          const handleBufferedOrder = (e) => {
+              console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
+              handleNewOrder(e.detail);
+          };
+  
+          window.addEventListener('socket-new-order', handleBufferedOrder);
+  
+          return () => {
+              window.removeEventListener('socket-new-order', handleBufferedOrder);
+          };
+      }, [handleNewOrder]);
+
 
     const fetchprintingOrders = async (type = orderType) => {
         try {

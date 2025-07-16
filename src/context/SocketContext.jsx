@@ -20,12 +20,77 @@ export const SocketProvider = ({ children }) => {
         accessories: [],
     });
 
-    // Load data from localStorage on initialization
+    const [pendingOrderBuffer, setPendingOrderBuffer] = useState({
+        glass: [],
+        caps: [],
+        pumps: [],
+        accessories: [],
+        boxes: [],
+        marketing: [],
+        printing: [],
+        foiling: [],
+        coating: [],
+        frosting: []
+    });
+
+
+    const addToBuffer = useCallback((team, orderData) => {
+        setPendingOrderBuffer(prev => {
+            const existing = prev[team] || [];
+            const alreadyExists = existing.find(o => o.orderData?._id === orderData.orderData?._id);
+            if (alreadyExists) return prev;
+
+            return {
+                ...prev,
+                [team]: [orderData, ...existing]
+            };
+        });
+    }, []);
+
+    const clearTeamBuffer = useCallback((team) => {
+        setPendingOrderBuffer(prev => ({
+            ...prev,
+            [team]: []
+        }));
+    }, []);
+
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                const path = window.location.pathname;
+
+                [
+                    'glass', 'caps', 'pumps', 'accessories',
+                    'boxes', 'marketing', 'printing',
+                    'foiling', 'coating', 'frosting'
+                ].forEach(team => {
+                    if (path.includes(team)) {
+                        pendingOrderBuffer[team].forEach(orderData => {
+                            if (orderData?.delete) {
+                                console.log(`🔁 Replaying DELETE for team: ${team}`);
+                                window.dispatchEvent(new CustomEvent('socket-order-deleted', { detail: orderData }));
+                            } else {
+                                console.log(`🔁 Replaying NEW order for team: ${team}`);
+                                window.dispatchEvent(new CustomEvent('socket-new-order', { detail: orderData }));
+                            }
+                        });
+                        clearTeamBuffer(team);
+                    }
+                });
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [pendingOrderBuffer, clearTeamBuffer]);
+
+
+
     useEffect(() => {
         const loadDataFromStorage = () => {
             const typeMapping = {
                 pumps: 'pumpdata',
-                caps: 'capdata', 
+                caps: 'capdata',
                 glass: 'bottledata',
                 accessories: 'accessories'
             };
@@ -45,18 +110,18 @@ export const SocketProvider = ({ children }) => {
                     cachedData[key] = [];
                 }
             });
-            
+
             setDataStore(cachedData);
         };
 
         loadDataFromStorage();
     }, []);
 
-    // 🌐 Fetch from API only if no data exists
+
     const fetchInitialData = async () => {
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -72,35 +137,34 @@ export const SocketProvider = ({ children }) => {
                 console.log(`🔄 Fetching ${key} from API...`);
                 const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
                 const data = response.data;
-                
+
                 // Save to localStorage
                 localStorage.setItem(`${endpoint}`, JSON.stringify(data));
                 console.log(`✅ Fetched and saved ${key}:`, data.length, 'items');
-                
+
                 return { key, data };
             });
 
             const results = await Promise.all(fetchPromises);
-            
+
             // Update dataStore with new data
             const newDataStore = { ...dataStore };
             results.forEach(({ key, data }) => {
                 newDataStore[key] = data;
             });
-            
+
             setDataStore(newDataStore);
             console.log('✅ All data synchronized');
-            
+
         } catch (err) {
             console.error('❌ Failed to fetch initial data:', err);
         }
     };
 
-    // 🔄 Update store + localStorage on socket updates
     const updateItemInStore = (type, item, action) => {
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -136,7 +200,7 @@ export const SocketProvider = ({ children }) => {
 
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -169,7 +233,7 @@ export const SocketProvider = ({ children }) => {
 
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -207,7 +271,7 @@ export const SocketProvider = ({ children }) => {
 
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -246,10 +310,10 @@ export const SocketProvider = ({ children }) => {
             }
 
             setLoading(true);
-            
+
             const typeMapping = {
                 pumps: 'pumpdata',
-                caps: 'capdata', 
+                caps: 'capdata',
                 glass: 'bottledata',
                 accessories: 'accessoriesData'
             };
@@ -282,11 +346,10 @@ export const SocketProvider = ({ children }) => {
         return dataStore[type] || [];
     }, [dataStore]);
 
-    // Clear cache function (useful for development or forced refresh)
     const clearCache = useCallback(() => {
         const typeMapping = {
             pumps: 'pumpdata',
-            caps: 'capdata', 
+            caps: 'capdata',
             glass: 'bottledata',
             accessories: 'accessoriesData'
         };
@@ -294,14 +357,14 @@ export const SocketProvider = ({ children }) => {
         Object.values(typeMapping).forEach(key => {
             localStorage.removeItem(`${key}`);
         });
-        
+
         setDataStore({
             pumps: [],
             caps: [],
             glass: [],
             accessories: [],
         });
-        
+
         console.log('🧹 Cache cleared');
     }, []);
 
@@ -340,19 +403,57 @@ export const SocketProvider = ({ children }) => {
 
         socketInstance.on('new-order', (orderData) => {
             console.log('📦 New order received:', orderData);
+
+            const assignedTeams = [];
+            const decorationTeams = ['printing', 'foiling', 'coating', 'frosting', 'marketing'];
+            orderData?.orderData?.item_ids?.forEach(item => {
+                const assignments = item.team_assignments || {};
+
+                if (assignments.glass?.length > 0) assignedTeams.push('glass');
+                if (assignments.caps?.length > 0) assignedTeams.push('caps');
+                if (assignments.pumps?.length > 0) assignedTeams.push('pumps');
+                if (assignments.accessories?.length > 0) assignedTeams.push('accessories');
+                if (assignments.boxes?.length > 0) assignedTeams.push('boxes');
+
+                // 👇 Add this block
+                decorationTeams.forEach(team => {
+                    if (assignments[team]?.length > 0) assignedTeams.push(team);
+                });
+            });
+             console.log('✅ Assigned Teams:', assignedTeams); //
+
+            assignedTeams.forEach(team => {
+                // If current page is not viewing that team, buffer it
+                const isOnLiveTab = document.visibilityState === 'visible' &&
+                    window.location.pathname.includes(team) &&
+                    window.location.pathname.includes('liveOrders');
+
+                if (isOnLiveTab) {
+                    console.log(`📨 Dispatching immediately for team: ${team}`);
+                    window.dispatchEvent(new CustomEvent('socket-new-order', { detail: orderData }));
+                } else {
+                    console.log(`⏳ Buffering order for team: ${team}`);
+                    addToBuffer(team, orderData);
+                }
+            });
         });
 
-        socketInstance.on('order-updated', (updateData) => {
-            console.log('✏️ Order updated received:', updateData);
+
+        socketInstance.on('order-deleted', (deleteData) => {
+           console.log('order deleted yayyya')
         });
+
 
         socketInstance.on('team-progress-updated', (progressData) => {
             console.log('📈 Progress update received in SocketProvider:', progressData);
+            window.dispatchEvent(new CustomEvent('socket-team-progress-updated', { detail: progressData }));
         });
 
         socketInstance.on('decoration-order-ready', (decorationData) => {
             console.log('🎨 Decoration order ready received:', decorationData);
+            window.dispatchEvent(new CustomEvent('socket-decoration-order-ready', { detail: decorationData }));
         });
+
 
         socketInstance.on('item-data-updated', ({ type, item, action }) => {
             console.log(`📦 [${type}] - ${action.toUpperCase()}:`, item.name || item._id);
@@ -564,12 +665,16 @@ export const SocketProvider = ({ children }) => {
         deleteItem,
         loadItems,
         getItemsByType,
-        clearCache, 
+        clearCache,
 
         notifyTeam,
         notifyOrderEdit,
         notifyProgressUpdate,
-        notifyOrderDelete
+        notifyOrderDelete,
+
+        pendingOrderBuffer,
+        addToBuffer,
+        clearTeamBuffer,
     };
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;

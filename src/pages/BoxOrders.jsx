@@ -202,7 +202,7 @@ const BoxOrders = ({ orderType }) => {
 
             toast.success(`Order #${orderNumber} has been deleted`);
             console.log(`✅ Order #${orderNumber} removed from box team view`);
-s
+            s
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
@@ -220,6 +220,20 @@ s
             socket.off('order-deleted', handleOrderDeleted);
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
+
+ useEffect(() => {
+        const handleBufferedOrder = (e) => {
+            console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
+            handleNewOrder(e.detail);
+        };
+
+        window.addEventListener('socket-new-order', handleBufferedOrder);
+
+        return () => {
+            window.removeEventListener('socket-new-order', handleBufferedOrder);
+        };
+    }, [handleNewOrder]);
+
 
     // FIXED: Function name changed from fetchGlassOrders to fetchBoxOrders
     const fetchBoxOrders = async (type = orderType) => {
@@ -351,11 +365,11 @@ s
             <>
                 <div className="bg-gradient-to-r from-orange-800 via-orange-600 to-orange-400 rounded-lg shadow-md py-3 px-4 mb-3">
                     <div
-    className="grid gap-2 text-white font-semibold text-xs items-center"
-    style={{
-        gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
-    }}
->
+                        className="grid gap-2 text-white font-semibold text-xs items-center"
+                        style={{
+                            gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
+                        }}
+                    >
 
                         <div className="text-left">Order #</div>
                         <div className="text-left">Item</div>
@@ -416,7 +430,7 @@ s
                                             key={`${order._id}-${item._id}-${box?._id || 'empty'}-${assignmentIndex}`}
                                             className={`grid gap-2 items-center py-2 px-3 text-xs ${bgColor} ${!isLastRowOfOrder ? 'border-b border-orange-100' : ''}`}
                                             style={{
-                                            gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
+                                                gridTemplateColumns: '1fr 1.5fr 3fr 3fr 2fr 2fr 2fr 0.8fr'
                                             }}
                                         >
                                             <div className="text-left">
