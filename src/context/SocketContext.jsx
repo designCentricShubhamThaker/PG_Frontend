@@ -20,70 +20,7 @@ export const SocketProvider = ({ children }) => {
         accessories: [],
     });
 
-    const [pendingOrderBuffer, setPendingOrderBuffer] = useState({
-        glass: [],
-        caps: [],
-        pumps: [],
-        accessories: [],
-        boxes: [],
-        marketing: [],
-        printing: [],
-        foiling: [],
-        coating: [],
-        frosting: []
-    });
-
-
-    const addToBuffer = useCallback((team, orderData) => {
-        setPendingOrderBuffer(prev => {
-            const existing = prev[team] || [];
-            const alreadyExists = existing.find(o => o.orderData?._id === orderData.orderData?._id);
-            if (alreadyExists) return prev;
-
-            return {
-                ...prev,
-                [team]: [orderData, ...existing]
-            };
-        });
-    }, []);
-
-    const clearTeamBuffer = useCallback((team) => {
-        setPendingOrderBuffer(prev => ({
-            ...prev,
-            [team]: []
-        }));
-    }, []);
-
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                const path = window.location.pathname;
-
-                [
-                    'glass', 'caps', 'pumps', 'accessories',
-                    'boxes', 'marketing', 'printing',
-                    'foiling', 'coating', 'frosting'
-                ].forEach(team => {
-                    if (path.includes(team)) {
-                        pendingOrderBuffer[team].forEach(orderData => {
-                            if (orderData?.delete) {
-                                console.log(`🔁 Replaying DELETE for team: ${team}`);
-                                window.dispatchEvent(new CustomEvent('socket-order-deleted', { detail: orderData }));
-                            } else {
-                                console.log(`🔁 Replaying NEW order for team: ${team}`);
-                                window.dispatchEvent(new CustomEvent('socket-new-order', { detail: orderData }));
-                            }
-                        });
-                        clearTeamBuffer(team);
-                    }
-                });
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [pendingOrderBuffer, clearTeamBuffer]);
-
+    
 
 
     useEffect(() => {
@@ -403,44 +340,11 @@ export const SocketProvider = ({ children }) => {
 
         socketInstance.on('new-order', (orderData) => {
             console.log('📦 New order received:', orderData);
-
-            const assignedTeams = [];
-            const decorationTeams = ['printing', 'foiling', 'coating', 'frosting', 'marketing'];
-            orderData?.orderData?.item_ids?.forEach(item => {
-                const assignments = item.team_assignments || {};
-
-                if (assignments.glass?.length > 0) assignedTeams.push('glass');
-                if (assignments.caps?.length > 0) assignedTeams.push('caps');
-                if (assignments.pumps?.length > 0) assignedTeams.push('pumps');
-                if (assignments.accessories?.length > 0) assignedTeams.push('accessories');
-                if (assignments.boxes?.length > 0) assignedTeams.push('boxes');
-
-                // 👇 Add this block
-                decorationTeams.forEach(team => {
-                    if (assignments[team]?.length > 0) assignedTeams.push(team);
-                });
-            });
-             console.log('✅ Assigned Teams:', assignedTeams); //
-
-            assignedTeams.forEach(team => {
-                // If current page is not viewing that team, buffer it
-                const isOnLiveTab = document.visibilityState === 'visible' &&
-                    window.location.pathname.includes(team) &&
-                    window.location.pathname.includes('liveOrders');
-
-                if (isOnLiveTab) {
-                    console.log(`📨 Dispatching immediately for team: ${team}`);
-                    window.dispatchEvent(new CustomEvent('socket-new-order', { detail: orderData }));
-                } else {
-                    console.log(`⏳ Buffering order for team: ${team}`);
-                    addToBuffer(team, orderData);
-                }
-            });
         });
 
 
         socketInstance.on('order-deleted', (deleteData) => {
-           console.log('order deleted yayyya')
+            console.log('order deleted yayyya')
         });
 
 
@@ -672,9 +576,7 @@ export const SocketProvider = ({ children }) => {
         notifyProgressUpdate,
         notifyOrderDelete,
 
-        pendingOrderBuffer,
-        addToBuffer,
-        clearTeamBuffer,
+        
     };
 
     return <SocketContext.Provider value={contextValue}>{children}</SocketContext.Provider>;

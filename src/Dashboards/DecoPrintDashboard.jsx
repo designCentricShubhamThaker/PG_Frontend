@@ -7,31 +7,18 @@ import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
-import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
-
-import TeamOrders from '../pages/TeamOrders.jsx';
 import DecoPrintOrders from '../pages/DecoPrintOrders.jsx';
-import { useSocket } from '../context/SocketContext.jsx';
+
 
 const DecoPrintDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout , user } = useAuth();
-    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
-  
-    useEffect(() => {
-      if (activeTab === 'liveOrders') {
-        if (pendingOrderBuffer.printing.length > 0) {
-          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.printing.length);
-          pendingOrderBuffer.printing.forEach(order =>
-            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
-          );
-          clearTeamBuffer('printing');
-        }
-      }
-    }, [activeTab]);
+  const { logout, user } = useAuth();
+
+
+
 
   const handleLogout = () => {
     logout();
@@ -60,7 +47,7 @@ const DecoPrintDashbaord = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD' },
+
     { id: 'liveOrders', label: 'LIVE ORDERS' },
     { id: 'pastOrders', label: 'PAST ORDERS' },
   ];
@@ -161,12 +148,12 @@ const DecoPrintDashbaord = () => {
         </header>
         <main className="flex-1 p-4 overflow-hidden">
           <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
-            {activeTab === 'dashboard' ? (
-              <DispatcherInventoryDashboard />
-            ) : activeTab === 'liveOrders' ? (
-             <DecoPrintOrders orderType="pending" />
+
+
+            {activeTab === 'liveOrders' ? (
+              <DecoPrintOrders orderType="pending" />
             ) : (
-             <DecoPrintOrders orderType="completed"/>
+              <DecoPrintOrders orderType="completed" />
             )}
           </div>
         </main>

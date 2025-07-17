@@ -27,9 +27,6 @@ const GlassOrders = ({ orderType }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
-    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
-
-    
 
     const getRemainingQty = (assignment) => {
         const completed = assignment.team_tracking?.total_completed_qty || 0;
@@ -203,20 +200,7 @@ const GlassOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-useEffect(() => {
-    const team = 'glass';
-    const buffered = pendingOrderBuffer?.[team] || [];
 
-    if (buffered.length > 0) {
-        buffered.forEach(orderData => {
-            const eventName = orderData?.delete ? 'socket-order-deleted' : 'socket-new-order';
-            window.dispatchEvent(new CustomEvent(eventName, { detail: orderData }));
-        });
-
-        clearTeamBuffer(team);
-    }
-}, []);
-;
 
 
 

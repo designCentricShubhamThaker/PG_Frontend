@@ -311,18 +311,7 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-   useEffect(() => {
-          const handleBufferedOrder = (e) => {
-              console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-              handleNewOrder(e.detail);
-          };
-  
-          window.addEventListener('socket-new-order', handleBufferedOrder);
-  
-          return () => {
-              window.removeEventListener('socket-new-order', handleBufferedOrder);
-          };
-      }, [handleNewOrder]);
+   
 
 
     const fetchprintingOrders = async (type = orderType) => {
