@@ -75,6 +75,64 @@ const DecoPrintOrders = ({ orderType }) => {
         );
     };
 
+    const updateBothCaches = (orderData, targetGlassItem = null) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+
+        let existingOrder = null;
+        let existingOrderType = null;
+
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
+                const found = cachedOrders.find(order => order._id === orderData._id);
+                if (found) {
+                    existingOrder = found;
+                    existingOrderType = type;
+                }
+            }
+        });
+
+        console.log('🔄 Cache update:', {
+            orderNumber: orderData.order_number,
+            currentStatus: orderStatus,
+            existingType: existingOrderType,
+            targetGlass: targetGlassItem
+        });
+
+        // Process both caches
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
+
+                // Remove existing order from this cache if it exists
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+
+                // Add order to this cache if it should be here
+                if (orderStatus === type) {
+                    if (existingOrder) {
+                        // Merge with existing order
+                        const mergedOrder = mergeOrders(existingOrder, orderData, targetGlassItem);
+                        cachedOrders = [mergedOrder, ...cachedOrders];
+                        console.log('✅ Merged order into', type, 'cache');
+                    } else {
+                        // New order
+                        cachedOrders = [orderData, ...cachedOrders];
+                        console.log('✅ Added new order to', type, 'cache');
+                    }
+                }
+
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.PRINTING);
+            } else {
+                // No existing cache - create new one if order belongs here
+                if (orderStatus === type) {
+                    saveTeamOrdersToLocalStorage([orderData], type, TEAMS.PRINTING);
+                    console.log('✅ Created new', type, 'cache with order');
+                }
+            }
+        });
+    };
+
+    // Also need to fix the handleNewOrder to properly handle cache updates
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
@@ -83,52 +141,149 @@ const DecoPrintOrders = ({ orderType }) => {
         console.log('🔍 New order received:', {
             orderNumber: newOrder.order_number,
             targetGlassItem,
-            hasTargetGlass: !!targetGlassItem
+            hasTargetGlass: !!targetGlassItem,
+            currentTab: orderType
         });
 
         if (!hasprintingAssignments(newOrder)) {
-            console.log('Order has no printing assignments, ignoring');
+            console.log('❌ Order has no printing assignments, ignoring');
             return;
         }
+
+        // Update both caches first - this is crucial
+        updateBothCaches(newOrder, targetGlassItem);
 
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
+        console.log('📊 Order status check:', {
+            orderStatus,
+            currentViewType,
+            shouldShowInCurrentTab: orderStatus === currentViewType
+        });
+
+        // Only update UI if order belongs to current view
         if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+            console.log('⚠️ Order belongs to different tab, removing from current view if exists');
+            // Remove from current view if it exists
+            setOrders(prevOrders => {
+                const filtered = prevOrders.filter(order => order._id !== newOrder._id);
+                if (filtered.length !== prevOrders.length) {
+                    console.log('🗑️ Removed order from current view');
+                }
+                return filtered;
+            });
             return;
         }
 
+        // Update current view
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
             let updatedOrders;
 
             if (existingOrderIndex >= 0) {
-                // Merge with existing order
+                // Merge with existing order in current view
                 const existingOrder = prevOrders[existingOrderIndex];
                 const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Merged new order data:', newOrder.order_number);
+                console.log('✅ Merged order in current view:', newOrder.order_number);
             } else {
                 updatedOrders = [newOrder, ...prevOrders];
-                console.log('✅ Added new order:', newOrder.order_number);
+                console.log('✅ Added order to current view:', newOrder.order_number);
             }
 
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
             return updatedOrders;
         });
+    }, [orderType, hasprintingAssignments, isOrderCompleted]);
+
+    // Same fix for handleOrderUpdate
+    const handleOrderUpdate = useCallback((updateData) => {
+        if (!updateData.orderData) return;
+        const updatedOrder = updateData.orderData;
+        const targetGlassItem = updateData.targetGlassItem;
+
+        
+        if (updateData.wasRemoved || !hasprintingAssignments(updatedOrder)) {
+            console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
+
+            // Remove from both caches
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.PRINTING);
+                }
+            });
+
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== updatedOrder._id);
+            });
+            return;
+        }
+        updateBothCaches(updatedOrder, targetGlassItem);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+        if (orderStatus !== currentViewType) {
+            console.log('⚠️ Order moved to different tab, removing from current view');
+            // Remove from current view
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== updatedOrder._id);
+            });
+            return;
+        }
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id !== updatedOrder._id);
+            let updatedOrders;
+
+            if (existingOrderIndex >= 0) {
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+                console.log('✅ Updated order in current view:', updatedOrder.order_number);
+            } else {
+                updatedOrders = [updatedOrder, ...prevOrders];
+                console.log('✅ Added order to current view:', updatedOrder.order_number);
+            }
+            return updatedOrders;
+        });
+    }, [orderType, hasprintingAssignments, isOrderCompleted]);
+
+    const handleOrderDeleted = useCallback((deleteData) => {
+        try {
+            const { orderId, orderNumber } = deleteData;
+            if (!orderId) {
+                console.warn('No order ID in delete notification');
+                return;
+            }
+
+            // Remove from both caches
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.PRINTING)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.PRINTING);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.PRINTING);
+                }
+            });
+
+            setOrders(prevOrders => {
+                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+                return updatedOrders;
+            });
+
+            setFilteredOrders(prevFiltered => {
+                return prevFiltered.filter(order => order._id !== orderId);
+            });
+
+            deleteOrderFromLocalStorage(orderId);
+        } catch (error) {
+            console.error('Error handling order delete notification:', error);
+        }
     }, [orderType]);
 
-    // ✅ FIXED: Proper merge logic that handles both filtered and full orders
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
-        console.log('🔧 Merging orders:', {
-            existingOrderId: existingOrder._id,
-            newOrderId: newOrder._id,
-            targetGlassItem,
-            isFiltered: !!targetGlassItem
-        });
-
         const existingItemsMap = {};
         const newItemsMap = {};
 
@@ -143,28 +298,22 @@ const DecoPrintOrders = ({ orderType }) => {
         const mergedItems = [];
 
         if (targetGlassItem) {
-            // For filtered orders (from decoration sequence), add new assignments precisely
             console.log('🎯 Processing filtered order for glass:', targetGlassItem);
-
-            // First, process items from the new (filtered) order
             Object.values(newItemsMap).forEach(newItem => {
                 if (existingItemsMap[newItem._id]) {
-                    // Merge existing item with new assignments for the target glass
+
                     const existingItem = existingItemsMap[newItem._id];
                     const mergedItem = mergeItemAssignments(existingItem, newItem, targetGlassItem);
                     mergedItems.push(mergedItem);
                     console.log('✅ Merged item:', newItem.name, 'for glass:', targetGlassItem);
                 } else {
-                    // New item, add as is
                     mergedItems.push(newItem);
                     console.log('✅ Added new item:', newItem.name);
                 }
             });
 
-            // Then, preserve existing items that have assignments for OTHER glasses
             Object.values(existingItemsMap).forEach(existingItem => {
                 if (!newItemsMap[existingItem._id]) {
-                    // Keep assignments for glasses OTHER than the target glass
                     const otherGlassAssignments = (existingItem.team_assignments?.printing || [])
                         .filter(assignment => {
                             const assignmentGlassId = assignment.glass_item_id?._id || assignment.glass_item_id;
@@ -184,10 +333,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 }
             });
         } else {
-            // For full order updates, use standard merge logic
             console.log('🔄 Processing full order update');
-
-            // Process all existing items
             Object.values(existingItemsMap).forEach(existingItem => {
                 if (newItemsMap[existingItem._id]) {
                     const newItem = newItemsMap[existingItem._id];
@@ -198,20 +344,12 @@ const DecoPrintOrders = ({ orderType }) => {
                 }
             });
 
-            // Add any completely new items
             Object.values(newItemsMap).forEach(newItem => {
                 if (!existingItemsMap[newItem._id]) {
                     mergedItems.push(newItem);
                 }
             });
         }
-
-        console.log('🎯 Merge result:', {
-            totalItems: mergedItems.length,
-            itemNames: mergedItems.map(item => item.name),
-            targetGlassItem
-        });
-
         return {
             ...existingOrder,
             ...newOrder,
@@ -219,84 +357,9 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     };
 
-
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
         return mergeItemAssignmentsSafe(existingItem, newItem, 'printing', targetGlassItem);
     };
-
-    const handleOrderUpdate = useCallback((updateData) => {
-        if (!updateData.orderData) return;
-        const updatedOrder = updateData.orderData;
-        const targetGlassItem = updateData.targetGlassItem;
-
-        console.log('🔄 Order update received:', {
-            orderNumber: updatedOrder.order_number,
-            targetGlassItem,
-            wasRemoved: updateData.wasRemoved
-        });
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (updateData.wasRemoved || !hasprintingAssignments(updatedOrder)) {
-                console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
-            if (orderStatus !== currentViewType) {
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.PRINTING);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Updated existing order:', updatedOrder.order_number);
-            } else {
-                updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('✅ Added new order:', updatedOrder.order_number);
-            }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-            return updatedOrders;
-        });
-    }, [orderType]);
-
-    const handleOrderDeleted = useCallback((deleteData) => {
-        try {
-            const { orderId, orderNumber } = deleteData;
-            if (!orderId) {
-                console.warn('No order ID in delete notification');
-                return;
-            }
-            setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.PRINTING);
-                return updatedOrders;
-            });
-            setFilteredOrders(prevFiltered => {
-                return prevFiltered.filter(order => order._id !== orderId);
-            });
-            deleteOrderFromLocalStorage(orderId);
-        } catch (error) {
-            console.error('Error handling order delete notification:', error);
-        }
-    }, [orderType]);
 
     useEffect(() => {
         if (!socket) return;
@@ -310,9 +373,6 @@ const DecoPrintOrders = ({ orderType }) => {
             socket.off('order-deleted', handleOrderDeleted);
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
-
-   
-
 
     const fetchprintingOrders = async (type = orderType) => {
         try {

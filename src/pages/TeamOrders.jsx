@@ -7,11 +7,11 @@ import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
 
 import {
+  TEAMS,
   getOrdersFromLocalStorage,
   hasOrdersInLocalStorage,
   saveOrdersToLocalStorage,
   deleteOrderFromLocalStorage,
-  updateOrderInLocalStorage,
   updateDispatcherOrderInLocalStorage,
 } from '../utils/localStorageUtils';
 import UpdateOrderChild from '../child/UpdateOrderChild';
@@ -36,31 +36,28 @@ const TeamOrders = ({ orderType }) => {
   const { socket, isConnected, notifyOrderDelete } = useSocket();
   const { user } = useAuth();
 
-  // Team-specific fetch (keep existing logic)
+  // Fetch orders with user-specific filtering
   const fetchOrders = async (type = orderType) => {
     try {
       setLoading(true);
 
-      // Use localStorage cache if available
-      if (hasOrdersInLocalStorage(type, user.team)) {
-        const cachedOrders = getOrdersFromLocalStorage(type, user.team);
+      // Check user-specific localStorage cache
+      if (hasOrdersInLocalStorage(type, TEAMS.MARKETING, user.username)) {
+        const cachedOrders = getOrdersFromLocalStorage(type, TEAMS.MARKETING, user.username);
         setOrders(cachedOrders);
         setLoading(false);
         return;
       }
 
-      // Make GET request with correct query params: created_by & team
-      // const response = await axios.get(
-      //   `http://localhost:5000/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(user.team)}`
-      // );
       const response = await axios.get(
-        `https://pg-backend-o05l.onrender.com/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(user.team)}`
+        `http://localhost:5000/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
       );
+      console.log(response)
 
       const fetchedOrders = response.data.data || [];
 
-      // Save to localStorage with team-specific key
-      saveOrdersToLocalStorage(fetchedOrders, type, user.team);
+      // Save to user-specific localStorage
+      saveOrdersToLocalStorage(fetchedOrders, type, TEAMS.MARKETING, user.username);
       setOrders(fetchedOrders);
       setLoading(false);
     } catch (err) {
@@ -86,7 +83,6 @@ const TeamOrders = ({ orderType }) => {
     return Array.from(teams);
   };
 
-  // IMPROVED: Use DispatcherOrders logic for item calculation
   const calculateCompletedItems = (order) => {
     if (!order.item_ids || !Array.isArray(order.item_ids)) {
       return 0;
@@ -101,22 +97,41 @@ const TeamOrders = ({ orderType }) => {
       }
 
       let allAssignmentsForThisItem = [];
+      let isThisItemCompleted = true;
+
       Object.keys(assignments).forEach(teamName => {
         const teamAssignments = assignments[teamName];
         if (Array.isArray(teamAssignments) && teamAssignments.length > 0) {
           allAssignmentsForThisItem.push(...teamAssignments);
+          const teamCompleted = teamAssignments.every(assignment => {
+            if (teamName === 'caps') {
+              const requiredQty = assignment.quantity || 0;
+              const hasAssembly = assignment.process && assignment.process.includes('Assembly');
+
+              if (hasAssembly) {
+                const metalCompleted = assignment.metal_tracking?.total_completed_qty || 0;
+                const assemblyCompleted = assignment.assembly_tracking?.total_completed_qty || 0;
+                return metalCompleted >= requiredQty && assemblyCompleted >= requiredQty;
+              } else {
+                const metalCompleted = assignment.metal_tracking?.total_completed_qty || 0;
+                return metalCompleted >= requiredQty;
+              }
+            } else {
+              const completedQty = assignment.team_tracking?.total_completed_qty || 0;
+              const requiredQty = assignment.quantity || 0;
+              return completedQty >= requiredQty;
+            }
+          });
+
+          if (!teamCompleted) {
+            isThisItemCompleted = false;
+          }
         }
       });
 
       if (allAssignmentsForThisItem.length === 0) {
-        return;
+        isThisItemCompleted = false;
       }
-
-      const isThisItemCompleted = allAssignmentsForThisItem.every(assignment => {
-        const completedQty = assignment.team_tracking?.total_completed_qty || 0;
-        const requiredQty = assignment.quantity || 0;
-        return completedQty >= requiredQty;
-      });
 
       if (isThisItemCompleted) {
         completedItemsCount++;
@@ -131,7 +146,6 @@ const TeamOrders = ({ orderType }) => {
     return order.item_ids.length;
   };
 
-  // IMPROVED: Use DispatcherOrders logic for completion percentage
   const calculateCompletionPercentage = (order) => {
     if (!order || !order.item_ids || !Array.isArray(order.item_ids) || order.item_ids.length === 0) {
       return 0;
@@ -146,18 +160,17 @@ const TeamOrders = ({ orderType }) => {
     return Math.min(percentage, 100);
   };
 
-  // Helper function to move orders between categories (team-specific)
-  const moveOrderBetweenCategories = (order, fromCategory, toCategory) => {
+  const moveOrderBetweenUserCategories = (order, fromCategory, toCategory) => {
     try {
-      console.log(`Moving order ${order.order_number} from ${fromCategory} to ${toCategory} for team ${user.team}`);
-      
+      console.log(`Moving order ${order.order_number} from ${fromCategory} to ${toCategory} for user ${user.username}`);
+
       // Remove from source category
-      const sourceOrders = getOrdersFromLocalStorage(fromCategory, user.team) || [];
+      const sourceOrders = getOrdersFromLocalStorage(fromCategory, TEAMS.MARKETING, user.username);
       const updatedSourceOrders = sourceOrders.filter(o => o._id !== order._id);
-      saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, user.team);
-      
+      saveOrdersToLocalStorage(updatedSourceOrders, fromCategory, TEAMS.MARKETING, user.username);
+
       // Add to destination category
-      const destOrders = getOrdersFromLocalStorage(toCategory, user.team) || [];
+      const destOrders = getOrdersFromLocalStorage(toCategory, TEAMS.MARKETING, user.username);
       const existingIndex = destOrders.findIndex(o => o._id === order._id);
 
       if (existingIndex !== -1) {
@@ -165,17 +178,16 @@ const TeamOrders = ({ orderType }) => {
       } else {
         destOrders.unshift(order);
       }
-      
-      saveOrdersToLocalStorage(destOrders, toCategory, user.team);
-      console.log(`Successfully moved order ${order.order_number} for team ${user.team}`);
+
+      saveOrdersToLocalStorage(destOrders, toCategory, TEAMS.MARKETING, user.username);
+      console.log(`Successfully moved order ${order.order_number} for user ${user.username}`);
     } catch (error) {
       console.error('Error moving order between categories:', error);
     }
   };
 
-  // IMPROVED: Use DispatcherOrders logic for progress updates
   const handleProgressUpdate = useCallback((progressData) => {
-    console.log('📈 Received progress update:', progressData);
+    console.log('📈 Team received progress update:', progressData);
     const orderNumber = progressData.orderNumber || progressData.order_number;
     if (!orderNumber) {
       console.warn('No order number in progress update');
@@ -185,8 +197,15 @@ const TeamOrders = ({ orderType }) => {
     setOrders(prevOrders => {
       const updatedOrders = prevOrders.map(order => {
         if (order.order_number === orderNumber) {
+
+          if (order.created_by !== user.username) {
+            return order;
+          }
+
+          // Get the updated order data
           const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
-          
+
+          // Merge the order data similar to dispatcher logic
           const mergedOrder = {
             ...order,
             ...updatedOrder,
@@ -194,7 +213,7 @@ const TeamOrders = ({ orderType }) => {
               const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
               if (!updatedItem) return existingItem;
 
-              // Merge team assignments deeply (like DispatcherOrders)
+              // Merge team assignments deeply
               const mergedAssignments = {};
               const allTeams = new Set([
                 ...Object.keys(existingItem.team_assignments || {}),
@@ -219,26 +238,15 @@ const TeamOrders = ({ orderType }) => {
                 mergedAssignments[team] = mergedTeamAssignments;
               });
 
-              // Calculate item status (like DispatcherOrders)
-              const isItemCompleted = Object.values(mergedAssignments).flat().every(assign => {
-                const completedQty = assign.team_tracking?.total_completed_qty || 0;
-                const requiredQty = assign.quantity || 0;
-                return completedQty >= requiredQty;
-              });
-
               return {
                 ...existingItem,
                 ...updatedItem,
-                team_assignments: mergedAssignments,
-                item_status: isItemCompleted ? 'Completed' : 'Pending' 
+                team_assignments: mergedAssignments
               };
             })
           };
 
-          const completedItems = calculateCompletedItems(mergedOrder);
-          const totalItems = calculateTotalItems(mergedOrder);
-          const completionPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-
+          const completionPercentage = calculateCompletionPercentage(mergedOrder);
           const previousStatus = order.order_status;
           const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
 
@@ -247,43 +255,66 @@ const TeamOrders = ({ orderType }) => {
             order_status: newStatus
           };
 
-          console.log(`📊 Order ${orderNumber} Progress: ${completedItems}/${totalItems} items (${completionPercentage}%) - Status: ${newStatus}`);
-
-          // Handle status changes and move between categories
+          console.log(`📊 Team Order ${orderNumber} Progress: ${completionPercentage}% - Status: ${newStatus}`);
           if (previousStatus !== newStatus) {
             if (newStatus === 'Completed' && orderType === 'pending') {
-              moveOrderBetweenCategories(finalOrder, 'pending', 'completed');
+              moveOrderBetweenUserCategories(finalOrder, 'pending', 'completed');
               toast.success(`Order #${orderNumber} has been completed!`);
             } else if (newStatus === 'Pending' && previousStatus === 'Completed' && orderType === 'completed') {
-              moveOrderBetweenCategories(finalOrder, 'completed', 'pending');
+              moveOrderBetweenUserCategories(finalOrder, 'completed', 'pending');
               toast.info(`Order #${orderNumber} moved back to pending`);
             }
           }
-          
-          updateDispatcherOrderInLocalStorage(finalOrder, user.team);
+          if (
+            user.role === 'dispatcher' ||
+            user.team === progressData.team ||
+            user.team === TEAMS.MARKETING // ✅ explicitly include marketing
+          ) {
+            updateDispatcherOrderInLocalStorage(finalOrder, user.team, user.username);
+           
+            console.log("✅ Order updated in localStorage");
+          } else {
+            console.log("⛔ Progress update ignored for this user/team.");
+          }
+          updateDispatcherOrderInLocalStorage(finalOrder, TEAMS.MARKETING, user.username);
+          const wasUpdated = updateDispatcherOrderInLocalStorage(finalOrder, TEAMS.MARKETING, user.username);
+
+          if (wasUpdated) {
+            console.log("✅ Order updated in localStorage");
+          } else {
+            console.warn("⚠️ Order not updated — maybe not found in localStorage?");
+          }
+
+
           return finalOrder;
         }
         return order;
       });
-      
-      saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
+
+      // Save the updated orders to localStorage with user-specific key
+      saveOrdersToLocalStorage(updatedOrders, orderType, TEAMS.MARKETING, user.username);
       return updatedOrders;
     });
-  }, [orderType, user.team]);
+  }, [orderType, user.username]);
 
-  // Handle new orders (team-specific)
   const handleNewOrder = useCallback((orderData) => {
     try {
-      const { orderData: newOrder, orderNumber,  } = orderData;
+      const { orderData: newOrder, orderNumber } = orderData;
       if (!newOrder || !newOrder._id) {
         return;
       }
-      const relevantToTeam = newOrder.item_ids?.some(item => 
-        item.team_assignments && Object.keys(item.team_assignments).includes(user.team)
+
+      // Check if order is created by current user
+      if (newOrder.created_by !== user.username) {
+        return;
+      }
+
+      const relevantToTeam = newOrder.item_ids?.some(item =>
+        item.team_assignments && Object.keys(item.team_assignments).includes(TEAMS.MARKETING)
       );
 
       if (!relevantToTeam) {
-        return; 
+        return;
       }
 
       if (orderType === 'pending') {
@@ -297,18 +328,17 @@ const TeamOrders = ({ orderType }) => {
           } else {
             updatedOrders = [newOrder, ...prevOrders];
           }
-          
-          saveOrdersToLocalStorage(updatedOrders, 'pending', user.team);
+
+          saveOrdersToLocalStorage(updatedOrders, 'pending', TEAMS.MARKETING, user.username);
           return updatedOrders;
         });
 
-        toast.success(`New order #${orderNumber} assigned to ${user.team} team`);
+        toast.success(`New order #${orderNumber} created`);
       }
     } catch (error) {
       console.error('Error handling new order:', error);
     }
-  }, [orderType, user.team]);
-
+  }, [orderType, user.username]);
 
   const handleOrderUpdated = useCallback((updateData) => {
     try {
@@ -316,27 +346,33 @@ const TeamOrders = ({ orderType }) => {
       if (!updatedOrder || !updatedOrder._id) {
         return;
       }
-      const relevantToTeam = updatedOrder.item_ids?.some(item => 
-        item.team_assignments && Object.keys(item.team_assignments).includes(user.team)
+
+      // Check if order belongs to current user
+      if (updatedOrder.created_by !== user.username) {
+        return;
+      }
+
+      const relevantToTeam = updatedOrder.item_ids?.some(item =>
+        item.team_assignments && Object.keys(item.team_assignments).includes(TEAMS.MARKETING)
       );
 
       if (!relevantToTeam) {
-        return; 
+        return;
       }
 
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.map(order =>
           order._id === updatedOrder._id ? updatedOrder : order
         );
-        saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
+        saveOrdersToLocalStorage(updatedOrders, orderType, TEAMS.MARKETING, user.username);
         return updatedOrders;
       });
-      
+
       toast.info(`Order #${orderNumber} has been updated`);
     } catch (error) {
       console.error('Error handling order update:', error);
     }
-  }, [orderType, user.team]);
+  }, [orderType, user.username]);
 
   const handleOrderDeleted = useCallback((deleteData) => {
     console.log('🗑️ Team orders received order delete notification:', deleteData);
@@ -346,26 +382,30 @@ const TeamOrders = ({ orderType }) => {
         console.warn('No order ID in delete notification');
         return;
       }
-      
+
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-        saveOrdersToLocalStorage(updatedOrders, orderType, user.team);
+        saveOrdersToLocalStorage(updatedOrders, orderType, TEAMS.MARKETING, user.username);
         return updatedOrders;
       });
 
-      deleteOrderFromLocalStorage(orderId, user.team);
+      // Also remove from other category
+      const otherType = orderType === 'pending' ? 'completed' : 'pending';
+      const otherOrders = getOrdersFromLocalStorage(otherType, TEAMS.MARKETING, user.username);
+      const filteredOtherOrders = otherOrders.filter(order => order._id !== orderId);
+      saveOrdersToLocalStorage(filteredOtherOrders, otherType, TEAMS.MARKETING, user.username);
+
       toast.success(`Order #${orderNumber} has been deleted successfully`);
       console.log(`✅ Order #${orderNumber} removed from team view`);
     } catch (error) {
       console.error('Error handling order delete notification:', error);
     }
-  }, [orderType, user.team]);
+  }, [orderType, user.username]);
 
-  // Socket listeners
   useEffect(() => {
     if (!socket || !isConnected) return;
-    
     console.log('🔌 Setting up socket listeners for team orders');
+
     socket.on('new-order', handleNewOrder);
     socket.on('order-updated', handleOrderUpdated);
     socket.on('team-progress-updated', handleProgressUpdate);
@@ -381,8 +421,10 @@ const TeamOrders = ({ orderType }) => {
   }, [socket, isConnected, handleNewOrder, handleOrderUpdated, handleProgressUpdate, handleOrderDeleted]);
 
   useEffect(() => {
-    fetchOrders(orderType);
-  }, [orderType, user.team, user.username]);
+    if (user?.username) {
+      fetchOrders(orderType);
+    }
+  }, [orderType, user?.username]);
 
   useEffect(() => {
     if (orders.length === 0) {
@@ -418,6 +460,7 @@ const TeamOrders = ({ orderType }) => {
     await fetchOrders(orderType);
     toast.success("Order created successfully!");
   };
+
 
   const handleDelete = async (orderId) => {
     try {
@@ -473,8 +516,8 @@ const TeamOrders = ({ orderType }) => {
       const assignedTeams = getAssignedTeams(orderToDelete);
 
       // Updated API call with user parameter
-      // const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}?user=${user.username}`);
-      const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}?user=${user.username}`);
+      const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}?user=${user.username}`);
+      // const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}?user=${user.username}`);
 
       if (response.data.success) {
         const deleteNotificationData = {
@@ -495,7 +538,7 @@ const TeamOrders = ({ orderType }) => {
         const updatedOrders = orders.filter(order => order._id !== orderId);
         setOrders(updatedOrders);
         setFilteredOrders(filteredOrders.filter(order => order._id !== orderId));
-        deleteOrderFromLocalStorage(orderId, user.team);
+        deleteOrderFromLocalStorage(orderId, TEAMS.MARKETING);
 
         Swal.close();
 
@@ -567,7 +610,7 @@ const TeamOrders = ({ orderType }) => {
   };
 
   const handleUpdateOrder = (type = orderType) => {
-    const updatedOrders = getOrdersFromLocalStorage(type, user.team);
+    const updatedOrders = getOrdersFromLocalStorage(type, TEAMS.MARKETING);
     setOrders(updatedOrders);
     setFilteredOrders(updatedOrders);
   };
@@ -606,14 +649,6 @@ const TeamOrders = ({ orderType }) => {
           >
             <Plus size={16} /> Create Order
           </button>
-
-          {/* Socket status indicator */}
-          {/* <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-xs text-gray-600">
-              {isConnected ? 'Real-time updates active' : 'Offline'}
-            </span>
-          </div> */}
         </div>
 
         <div className="relative">

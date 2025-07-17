@@ -16,7 +16,7 @@ import UpdateCoatQty from '../updateQuanityComponents/updateCoatQty.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { mergeItemAssignmentsSafe } from '../utils/mergeItemsSafe.jsx';
 
-const DecoPrintOrders = ({ orderType }) => {
+const DecoCaotOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -73,27 +73,74 @@ const DecoPrintOrders = ({ orderType }) => {
         );
     };
 
+    const updateBothCaches = (orderData, targetGlassItem = null) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+
+        let existingOrder = null;
+        let existingOrderType = null;
+
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
+                const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
+                const found = cachedOrders.find(order => order._id === orderData._id);
+                if (found) {
+                    existingOrder = found;
+                    existingOrderType = type;
+                }
+            }
+        });
+
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+                if (orderStatus === type) {
+                    if (existingOrder) {
+                        // Merge with existing order
+                        const mergedOrder = mergeOrders(existingOrder, orderData, targetGlassItem);
+                        cachedOrders = [mergedOrder, ...cachedOrders];
+                        console.log('✅ Merged order into', type, 'cache');
+                    } else {
+                        cachedOrders = [orderData, ...cachedOrders];
+                        console.log('✅ Added new order to', type, 'cache');
+                    }
+                }
+
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.COATING);
+            } else {
+
+                if (orderStatus === type) {
+                    saveTeamOrdersToLocalStorage([orderData], type, TEAMS.COATING);
+                    console.log('✅ Created new', type, 'cache with order');
+                }
+            }
+        });
+    };
+
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
         const targetGlassItem = orderData.targetGlassItem;
 
-        console.log('🔍 New order received:', {
-            orderNumber: newOrder.order_number,
-            targetGlassItem,
-            hasTargetGlass: !!targetGlassItem
-        });
-
         if (!hascoatingAssignments(newOrder)) {
-            console.log('Order has no coating assignments, ignoring');
+            console.log('❌ Order has no printing assignments, ignoring');
             return;
         }
 
+        updateBothCaches(newOrder, targetGlassItem);
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
         if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
+            console.log('⚠️ Order belongs to different tab, removing from current view if exists');
+
+            setOrders(prevOrders => {
+                const filtered = prevOrders.filter(order => order._id !== newOrder._id);
+                if (filtered.length !== prevOrders.length) {
+                    console.log('🗑️ Removed order from current view');
+                }
+                return filtered;
+            });
             return;
         }
 
@@ -102,23 +149,107 @@ const DecoPrintOrders = ({ orderType }) => {
             let updatedOrders;
 
             if (existingOrderIndex >= 0) {
-                // Merge with existing order
                 const existingOrder = prevOrders[existingOrderIndex];
                 const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Merged new order data:', newOrder.order_number);
+                console.log('✅ Merged order in current view:', newOrder.order_number);
             } else {
                 updatedOrders = [newOrder, ...prevOrders];
-                console.log('✅ Added new order:', newOrder.order_number);
+                console.log('✅ Added order to current view:', newOrder.order_number);
             }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.COATING);
             return updatedOrders;
         });
+    }, [orderType, hascoatingAssignments, isOrderCompleted]);
+
+
+    const handleOrderUpdate = useCallback((updateData) => {
+        if (!updateData.orderData) return;
+        const updatedOrder = updateData.orderData;
+        const targetGlassItem = updateData.targetGlassItem;
+
+        if (updateData.wasRemoved || !hascoatingAssignments(updatedOrder)) {
+            console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
+
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.COATING);
+                }
+            });
+
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== updatedOrder._id);
+            });
+            return;
+        }
+
+        updateBothCaches(updatedOrder, targetGlassItem);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
+        if (orderStatus !== currentViewType) {
+            console.log('⚠️ Order moved to different tab, removing from current view');
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== updatedOrder._id);
+            });
+            return;
+        }
+
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id !== updatedOrder._id);
+            let updatedOrders;
+
+            if (existingOrderIndex >= 0) {
+                const existingOrder = prevOrders[existingOrderIndex];
+                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = mergedOrder;
+                console.log('✅ Updated order in current view:', updatedOrder.order_number);
+            } else {
+                updatedOrders = [updatedOrder, ...prevOrders];
+                console.log('✅ Added order to current view:', updatedOrder.order_number);
+            }
+
+            return updatedOrders;
+        });
+    }, [orderType, hascoatingAssignments, isOrderCompleted]);
+
+    const handleOrderDeleted = useCallback((deleteData) => {
+        try {
+            const { orderId, orderNumber } = deleteData;
+            if (!orderId) {
+                console.warn('No order ID in delete notification');
+                return;
+            }
+
+            // Remove from both caches
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.COATING);
+                }
+            });
+
+            setOrders(prevOrders => {
+                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+                return updatedOrders;
+            });
+
+            setFilteredOrders(prevFiltered => {
+                return prevFiltered.filter(order => order._id !== orderId);
+            });
+
+            deleteOrderFromLocalStorage(orderId);
+        } catch (error) {
+            console.error('Error handling order delete notification:', error);
+        }
     }, [orderType]);
 
-    // ✅ FIXED: Proper merge logic that handles both filtered and full orders
+
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
         console.log('🔧 Merging orders:', {
             existingOrderId: existingOrder._id,
@@ -217,83 +348,9 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     };
 
-
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
         return mergeItemAssignmentsSafe(existingItem, newItem, 'coating', targetGlassItem);
     };
-    const handleOrderUpdate = useCallback((updateData) => {
-        if (!updateData.orderData) return;
-        const updatedOrder = updateData.orderData;
-        const targetGlassItem = updateData.targetGlassItem;
-
-        console.log('🔄 Order update received:', {
-            orderNumber: updatedOrder.order_number,
-            targetGlassItem,
-            wasRemoved: updateData.wasRemoved
-        });
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (updateData.wasRemoved || !hascoatingAssignments(updatedOrder)) {
-                console.log('🗑️ Removing order from coating:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.COATING);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
-            if (orderStatus !== currentViewType) {
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.COATING);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Updated existing order:', updatedOrder.order_number);
-            } else {
-                updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('✅ Added new order:', updatedOrder.order_number);
-            }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.COATING);
-            return updatedOrders;
-        });
-    }, [orderType]);
-
-    const handleOrderDeleted = useCallback((deleteData) => {
-        try {
-            const { orderId, orderNumber } = deleteData;
-            if (!orderId) {
-                console.warn('No order ID in delete notification');
-                return;
-            }
-            setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.COATING);
-                return updatedOrders;
-            });
-            setFilteredOrders(prevFiltered => {
-                return prevFiltered.filter(order => order._id !== orderId);
-            });
-            deleteOrderFromLocalStorage(orderId);
-        } catch (error) {
-            console.error('Error handling order delete notification:', error);
-        }
-    }, [orderType]);
 
     useEffect(() => {
         if (!socket) return;
@@ -308,18 +365,6 @@ const DecoPrintOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-   useEffect(() => {
-          const handleBufferedOrder = (e) => {
-              console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-              handleNewOrder(e.detail);
-          };
-  
-          window.addEventListener('socket-new-order', handleBufferedOrder);
-  
-          return () => {
-              window.removeEventListener('socket-new-order', handleBufferedOrder);
-          };
-      }, [handleNewOrder]);
 
 
     const fetchcoatingOrders = async (type = orderType) => {
@@ -333,7 +378,7 @@ const DecoPrintOrders = ({ orderType }) => {
                 return;
             }
 
-            const response = await axios.get(`http://localhost:5000/api/print?orderType=${type}`);
+            const response = await axios.get(`http://localhost:5000/api/coat?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
 
             saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.COATING);
@@ -567,8 +612,8 @@ const DecoPrintOrders = ({ orderType }) => {
                                             <div className="text-center">
                                                 {isFirstRowOfItem ? (
                                                     <button
-                                                    
-                                                        onClick={() => handleEditClick(order, item) }
+
+                                                        onClick={() => handleEditClick(order, item)}
                                                         className="inline-flex items-center justify-center p-1.5 bg-orange-600 rounded text-white hover:bg-orange-500 transition-colors duration-200 shadow-sm"
                                                         title="Edit quantities"
                                                     >
@@ -715,4 +760,4 @@ const DecoPrintOrders = ({ orderType }) => {
     );
 };
 
-export default DecoPrintOrders;
+export default DecoCaotOrders;

@@ -349,7 +349,7 @@ export const SocketProvider = ({ children }) => {
 
 
         socketInstance.on('team-progress-updated', (progressData) => {
-            console.log('📈 Progress update received in SocketProvider:', progressData);
+            // console.log('📈 Progress update received in SocketProvider:', progressData);
             window.dispatchEvent(new CustomEvent('socket-team-progress-updated', { detail: progressData }));
         });
 

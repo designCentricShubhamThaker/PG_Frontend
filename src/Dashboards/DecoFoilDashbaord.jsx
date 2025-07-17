@@ -9,7 +9,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
 import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 import DecoFoilOrders from '../pages/DecoFoilOrders.jsx';
-import { useSocket } from '../context/SocketContext.jsx';
 
 
 const DecoFoilDashbaord = () => {
@@ -18,19 +17,6 @@ const DecoFoilDashbaord = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout , user } = useAuth();
-    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
-  
-    useEffect(() => {
-      if (activeTab === 'liveOrders') {
-        if (pendingOrderBuffer.foiling.length > 0) {
-          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.foiling.length);
-          pendingOrderBuffer.foiling.forEach(order =>
-            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
-          );
-          clearTeamBuffer('foiling');
-        }
-      }
-    }, [activeTab]);
 
   const handleLogout = () => {
     logout();
@@ -59,7 +45,6 @@ const DecoFoilDashbaord = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD' },
     { id: 'liveOrders', label: 'LIVE ORDERS' },
     { id: 'pastOrders', label: 'PAST ORDERS' },
   ];
@@ -160,9 +145,7 @@ const DecoFoilDashbaord = () => {
         </header>
         <main className="flex-1 p-4 overflow-hidden">
           <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
-            {activeTab === 'dashboard' ? (
-              <DispatcherInventoryDashboard />
-            ) : activeTab === 'liveOrders' ? (
+         { activeTab === 'liveOrders' ? (
              <DecoFoilOrders orderType="pending" />
             ) : (
              <DecoFoilOrders orderType="completed"/>

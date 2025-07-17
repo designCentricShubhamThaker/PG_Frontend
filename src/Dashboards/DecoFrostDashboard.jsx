@@ -11,7 +11,7 @@ import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
 
 import TeamOrders from '../pages/TeamOrders.jsx';
 import DecoFrostOrders from '../pages/DecoFrostOrders.jsx';
-import { useSocket } from '../context/SocketContext.jsx';
+
 
 const DecoFrostDashbaord = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -19,19 +19,7 @@ const DecoFrostDashbaord = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout, user } = useAuth();
-  const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
 
-  useEffect(() => {
-    if (activeTab === 'liveOrders') {
-      if (pendingOrderBuffer.frosting.length > 0) {
-        console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.frosting.length);
-        pendingOrderBuffer.frosting.forEach(order =>
-          window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
-        );
-        clearTeamBuffer('frosting');
-      }
-    }
-  }, [activeTab]);
 
   const handleLogout = () => {
     logout();
@@ -60,7 +48,7 @@ const DecoFrostDashbaord = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD' },
+
     { id: 'liveOrders', label: 'LIVE ORDERS' },
     { id: 'pastOrders', label: 'PAST ORDERS' },
   ];
@@ -161,9 +149,7 @@ const DecoFrostDashbaord = () => {
         </header>
         <main className="flex-1 p-4 overflow-hidden">
           <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
-            {activeTab === 'dashboard' ? (
-              <DispatcherInventoryDashboard />
-            ) : activeTab === 'liveOrders' ? (
+            {activeTab === 'liveOrders' ? (
               <DecoFrostOrders orderType="pending" />
             ) : (
               <DecoFrostOrders orderType="completed" />

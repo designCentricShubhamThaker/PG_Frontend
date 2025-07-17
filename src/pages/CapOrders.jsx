@@ -28,17 +28,14 @@ const CapOrders = ({ orderType }) => {
     const [selectedItem, setSelectedItem] = useState(null);
     const { socket, isConnected } = useSocket();
 
-    // Helper function to determine if cap has assembly process
     const hasAssemblyProcess = (process) => {
         return process && process.includes('Assembly');
     };
 
-    // Helper function to determine if cap has metal process
     const hasMetalProcess = (process) => {
         return process && process.includes('Metal');
     };
 
-    // Calculate remaining quantity for a specific process step
     const getRemainingQtyForProcess = (capItem, processType) => {
         const totalQty = capItem.quantity || 0;
 
@@ -52,8 +49,6 @@ const CapOrders = ({ orderType }) => {
 
         return totalQty;
     };
-
-    // Calculate overall remaining quantity (minimum of all process steps)
     const getOverallRemainingQty = (capItem) => {
         const totalQty = capItem.quantity || 0;
         const hasAssembly = hasAssemblyProcess(capItem.process);
@@ -66,7 +61,6 @@ const CapOrders = ({ orderType }) => {
             const assemblyCompleted = capItem.assembly_tracking?.total_completed_qty || 0;
             minCompleted = Math.min(metalCompleted, assemblyCompleted);
         } else {
-            // Only metal/non-metal process
             minCompleted = capItem.metal_tracking?.total_completed_qty || 0;
         }
 
@@ -100,7 +94,6 @@ const CapOrders = ({ orderType }) => {
         return items.every(item => isItemCompleted(item));
     };
 
-    // Fixed: Determine correct order type for caps team
     const determineCapOrderType = (order) => {
         const isCompleted = isOrderCompleted(order);
         return isCompleted ? 'completed' : 'pending';
@@ -112,36 +105,46 @@ const CapOrders = ({ orderType }) => {
         );
     };
 
+    const updateBothCaches = (orderData) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+                if (orderStatus === type) {
+                    cachedOrders = [orderData, ...cachedOrders];
+                }
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.CAPS);
+            }
+        });
+    };
+
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
 
         if (!hascapsAssignments(newOrder)) {
-            console.log('Order has no caps assignments, ignoring');
+            console.log('Order has no glass assignments, ignoring');
             return;
         }
-
-        const orderStatus = determineCapOrderType(newOrder);
+        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
+        updateBothCaches(newOrder);
 
-        if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-            return;
+        if (orderStatus === currentViewType) {
+            setOrders(prevOrders => {
+                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+                let updatedOrders;
+                if (existingOrderIndex >= 0) {
+                    updatedOrders = [...prevOrders];
+                    updatedOrders[existingOrderIndex] = newOrder;
+                } else {
+                    updatedOrders = [newOrder, ...prevOrders];
+                    console.log('Added new order:', newOrder.order_number);
+                }
+                return updatedOrders;
+            });
         }
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = newOrder;
-            } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
-            }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.CAPS);
-            return updatedOrders;
-        });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
@@ -149,43 +152,35 @@ const CapOrders = ({ orderType }) => {
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
+        if (wasRemoved || !hasAssignments || !hascapsAssignments(updatedOrder)) {
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.CAPS);
+                }
+            });
+
+            setOrders(prevOrders => {
+                const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                return filteredOrders;
+            });
+            return;
+        }
+
+        updateBothCaches(updatedOrder);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from caps team:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.CAPS);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            if (!hascapsAssignments(updatedOrder)) {
-                console.log('Updated order has no caps assignments, removing if exists');
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.CAPS);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = determineCapOrderType(updatedOrder);
-            const currentViewType = orderType.toLowerCase();
-
             if (orderStatus !== currentViewType) {
-                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.CAPS);
-                    return filteredOrders;
+                    return prevOrders.filter(order => order._id !== updatedOrder._id);
                 }
                 return prevOrders;
             }
-
             let updatedOrders;
             if (existingOrderIndex >= 0) {
                 updatedOrders = [...prevOrders];
@@ -195,8 +190,6 @@ const CapOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.CAPS);
             return updatedOrders;
         });
     }, [orderType]);
@@ -208,19 +201,26 @@ const CapOrders = ({ orderType }) => {
                 console.warn('No order ID in delete notification');
                 return;
             }
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.CAPS);
+                }
+            });
+
             setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.CAPS);
-                return updatedOrders;
+                return prevOrders.filter(order => order._id !== orderId);
             });
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-            deleteOrderFromLocalStorage(orderId);
+            deleteOrderFromLocalStorage(orderId, TEAMS.CAPS);
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
     }, [orderType]);
+
 
     useEffect(() => {
         if (!socket) return;
@@ -235,19 +235,6 @@ const CapOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-    useEffect(() => {
-           const handleBufferedOrder = (e) => {
-               console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-               handleNewOrder(e.detail);
-           };
-   
-           window.addEventListener('socket-new-order', handleBufferedOrder);
-   
-           return () => {
-               window.removeEventListener('socket-new-order', handleBufferedOrder);
-           };
-       }, [handleNewOrder]);
-
 
     const fetchcapsOrders = async (type = orderType) => {
         try {
@@ -259,11 +246,8 @@ const CapOrders = ({ orderType }) => {
                 setLoading(false);
                 return;
             }
-
             const response = await axios.get(`http://localhost:5000/api/caps?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
-            console.log(fetchedOrders)
-
             saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.CAPS);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
@@ -316,39 +300,29 @@ const CapOrders = ({ orderType }) => {
         setSelectedItem(item);
         setShowModal(true);
     };
-    // Fixed handleLocalOrderUpdate function for CapOrders component
+
     const handleLocalOrderUpdate = (updatedOrder) => {
         console.log('Handling local order update:', updatedOrder.order_number);
-
-        // Update the order in localStorage using the utility function
         const success = updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.CAPS);
 
         if (success) {
             console.log('Order updated successfully in localStorage');
 
-            // Determine where this order should be now
             const newOrderType = determineCapOrderType(updatedOrder);
             const currentViewType = orderType.toLowerCase();
-
             console.log(`Order ${updatedOrder.order_number}: newType=${newOrderType}, currentView=${currentViewType}`);
-
-            // If the order no longer belongs in current view, remove it from current state
             if (newOrderType !== currentViewType) {
                 console.log(`Removing order ${updatedOrder.order_number} from ${currentViewType} view`);
-
                 setOrders(prevOrders => {
                     const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
                     return filteredOrders;
                 });
-
                 setFilteredOrders(prevFiltered => {
                     const filteredOrders = prevFiltered.filter(order => order._id !== updatedOrder._id);
                     return filteredOrders;
                 });
             } else {
-                // Update the order in current view
                 console.log(`Updating order ${updatedOrder.order_number} in ${currentViewType} view`);
-
                 setOrders(prevOrders => {
                     const existingIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
                     if (existingIndex !== -1) {
@@ -356,7 +330,6 @@ const CapOrders = ({ orderType }) => {
                         updatedOrders[existingIndex] = updatedOrder;
                         return updatedOrders;
                     } else {
-                        // Add the order if it doesn't exist in current view
                         return [updatedOrder, ...prevOrders];
                     }
                 });
@@ -368,7 +341,6 @@ const CapOrders = ({ orderType }) => {
                         updatedFiltered[existingIndex] = updatedOrder;
                         return updatedFiltered;
                     } else {
-                        // Add the order if it doesn't exist in current filtered view
                         return [updatedOrder, ...prevFiltered];
                     }
                 });

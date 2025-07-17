@@ -14,7 +14,6 @@ import {
 } from '../utils/localStorageUtils.jsx';
 import UpdateGlassQty from '../updateQuanityComponents/updateGlassQty.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
-
 const GlassOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -72,6 +71,20 @@ const GlassOrders = ({ orderType }) => {
         );
     };
 
+    const updateBothCaches = (orderData) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.GLASS)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.GLASS);
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+                if (orderStatus === type) {
+                    cachedOrders = [orderData, ...cachedOrders];
+                }
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.GLASS);
+            }
+        });
+    };
+
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
@@ -80,72 +93,61 @@ const GlassOrders = ({ orderType }) => {
             console.log('Order has no glass assignments, ignoring');
             return;
         }
-
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
+        updateBothCaches(newOrder);
 
-        if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-            return;
+        if (orderStatus === currentViewType) {
+            setOrders(prevOrders => {
+                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+                let updatedOrders;
+                if (existingOrderIndex >= 0) {
+                    updatedOrders = [...prevOrders];
+                    updatedOrders[existingOrderIndex] = newOrder;
+                } else {
+                    updatedOrders = [newOrder, ...prevOrders];
+                    console.log('Added new order:', newOrder.order_number);
+                }
+                return updatedOrders;
+            });
         }
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = newOrder;
-            } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
-            }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
-            return updatedOrders;
-        });
     }, [orderType]);
+    
 
     const handleOrderUpdate = useCallback((updateData) => {
         if (!updateData.orderData) return;
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
+        if (wasRemoved || !hasAssignments || !hasGlassAssignments(updatedOrder)) {
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.GLASS)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.GLASS);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.GLASS);
+                }
+            });
+
+            setOrders(prevOrders => {
+                const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                return filteredOrders;
+            });
+            return;
+        }
+
+        updateBothCaches(updatedOrder);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from glass team:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            if (!hasGlassAssignments(updatedOrder)) {
-                console.log('Updated order has no glass assignments, removing if exists');
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
             if (orderStatus !== currentViewType) {
-                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.GLASS);
-                    return filteredOrders;
+                    return prevOrders.filter(order => order._id !== updatedOrder._id);
                 }
                 return prevOrders;
             }
-
             let updatedOrders;
             if (existingOrderIndex >= 0) {
                 updatedOrders = [...prevOrders];
@@ -155,12 +157,8 @@ const GlassOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
-
             return updatedOrders;
         });
-
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
@@ -170,20 +168,25 @@ const GlassOrders = ({ orderType }) => {
                 console.warn('No order ID in delete notification');
                 return;
             }
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.GLASS)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.GLASS);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.GLASS);
+                }
+            });
+
             setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.GLASS);
-                return updatedOrders;
+                return prevOrders.filter(order => order._id !== orderId);
             });
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-          deleteOrderFromLocalStorage(orderId, TEAMS.GLASS); 
+            deleteOrderFromLocalStorage(orderId, TEAMS.GLASS);
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
     }, [orderType]);
-
 
     useEffect(() => {
         if (!socket) return;
@@ -191,18 +194,12 @@ const GlassOrders = ({ orderType }) => {
         socket.on('order-updated', handleOrderUpdate);
         socket.on('order-deleted', handleOrderDeleted);
 
-
         return () => {
             socket.off('new-order', handleNewOrder);
             socket.off('order-updated', handleOrderUpdate);
             socket.off('order-deleted', handleOrderDeleted);
-
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
-
-
-
-
 
     const fetchGlassOrders = async (type = orderType) => {
         try {

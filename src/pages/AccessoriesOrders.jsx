@@ -75,90 +75,82 @@ const AccessoriesOrders = ({ orderType }) => {
         );
     };
 
+    const updateBothCaches = (orderData) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.ACCESSORIES)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.ACCESSORIES);
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+                if (orderStatus === type) {
+                    cachedOrders = [orderData, ...cachedOrders];
+                }
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.ACCESSORIES);
+            }
+        });
+    };
+
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Box team received new order:', orderData);
-
         if (!orderData.orderData) return;
-
         const newOrder = orderData.orderData;
 
-        // FIXED: Check for accessories assignments instead of glass
         if (!hasBoxAssignments(newOrder)) {
-            console.log('Order has no accessories assignments, ignoring');
+            console.log('Order has no glass assignments, ignoring');
             return;
         }
-
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
+        updateBothCaches(newOrder);
 
-        if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-            return;
+        if (orderStatus === currentViewType) {
+            setOrders(prevOrders => {
+                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+                let updatedOrders;
+                if (existingOrderIndex >= 0) {
+                    updatedOrders = [...prevOrders];
+                    updatedOrders[existingOrderIndex] = newOrder;
+                } else {
+                    updatedOrders = [newOrder, ...prevOrders];
+                    console.log('Added new order:', newOrder.order_number);
+                }
+                return updatedOrders;
+            });
         }
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = newOrder;
-                console.log('Updated existing order:', newOrder.order_number);
-            } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
-            }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.ACCESSORIES);
-
-            return updatedOrders;
-        });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Box team received order update:', updateData);
-
         if (!updateData.orderData) return;
-
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
+        if (wasRemoved || !hasAssignments || !hasBoxAssignments(updatedOrder)) {
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.ACCESSORIES)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.ACCESSORIES);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.ACCESSORIES);
+                }
+            });
+
+            setOrders(prevOrders => {
+                const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                return filteredOrders;
+            });
+            return;
+        }
+
+        updateBothCaches(updatedOrder);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from accessories team:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.ACCESSORIES);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            if (!hasBoxAssignments(updatedOrder)) {
-                console.log('Updated order has no accessories assignments, removing if exists');
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.ACCESSORIES);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
             if (orderStatus !== currentViewType) {
-                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.ACCESSORIES);
-                    return filteredOrders;
+                    return prevOrders.filter(order => order._id !== updatedOrder._id);
                 }
                 return prevOrders;
             }
-
             let updatedOrders;
             if (existingOrderIndex >= 0) {
                 updatedOrders = [...prevOrders];
@@ -168,46 +160,37 @@ const AccessoriesOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.ACCESSORIES);
-
             return updatedOrders;
         });
-
-        if (updateData.editedFields && updateData.editedFields.length > 0) {
-            console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
-            toast.success("order progress updated !")
-        }
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Box team received order delete notification:', deleteData);
         try {
             const { orderId, orderNumber } = deleteData;
             if (!orderId) {
                 console.warn('No order ID in delete notification');
                 return;
             }
-
-            setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.ACCESSORIES);
-                return updatedOrders;
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.ACCESSORIES)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.ACCESSORIES);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.ACCESSORIES);
+                }
             });
 
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== orderId);
+            });
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-
-            deleteOrderFromLocalStorage(orderId);
-
-            toast.success(`Order #${orderNumber} has been deleted`);
-            console.log(`✅ Order #${orderNumber} removed from accessories team view`);
-            
+            deleteOrderFromLocalStorage(orderId, TEAMS.ACCESSORIES);
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
     }, [orderType]);
+
 
     useEffect(() => {
         if (!socket) return;
@@ -222,21 +205,7 @@ const AccessoriesOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-    useEffect(() => {
-        const handleBufferedOrder = (e) => {
-            console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-            handleNewOrder(e.detail);
-        };
 
-        window.addEventListener('socket-new-order', handleBufferedOrder);
-
-        return () => {
-            window.removeEventListener('socket-new-order', handleBufferedOrder);
-        };
-    }, [handleNewOrder]);
-
-
-    // FIXED: Function name changed from fetchGlassOrders to fetchBoxOrders
     const fetchBoxOrders = async (type = orderType) => {
         try {
             setLoading(true);
@@ -251,7 +220,6 @@ const AccessoriesOrders = ({ orderType }) => {
             const response = await axios.get(`http://localhost:5000/api/accessories?orderType=${type}`);
             // const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/accessories?orderType=${type}`);
             const fetchedOrders = response.data.data || [];
-
             saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.ACCESSORIES);
             setOrders(fetchedOrders);
             setFilteredOrders(fetchedOrders);
@@ -280,7 +248,7 @@ const AccessoriesOrders = ({ orderType }) => {
                     if (item.name?.toLowerCase().includes(searchTerm.toLowerCase())) {
                         return true;
                     }
-                    // FIXED: Search in accessories assignments instead of glass
+
                     return item.team_assignments?.accessories?.some(accessories => {
                         return accessories.accessories_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             accessories.decoration?.toLowerCase().includes(searchTerm.toLowerCase()) ||

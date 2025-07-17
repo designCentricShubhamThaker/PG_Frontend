@@ -17,7 +17,7 @@ import { useAuth } from '../context/useAuth.jsx';
 const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
 
     const { notifyTeam, isConnected, getItemsByType, loadItems } = useSocket();
-    const { user} = useAuth()
+    const { user } = useAuth()
 
     const caps = getItemsByType('caps');
     const pumps = getItemsByType('pumps');
@@ -433,7 +433,7 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
         setOrderItems(updatedItems);
     };
 
-   const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         setError('');
@@ -465,9 +465,13 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                 const validCaps = item.teamAssignments.caps.filter(c => c.cap_name && c.cap_name !== "N/A" && c.quantity);
                 const validBoxes = item.teamAssignments.boxes.filter(b => b.box_name && b.box_name !== "N/A" && b.quantity);
                 const validPumps = item.teamAssignments.pumps.filter(p => p.pump_name && p.pump_name !== "N/A" && p.quantity);
-                const validMarketing = (item.teamAssignments.marketing || []).filter(m => m.marketing_name && m.marketing_name !== "N/A" && m.quantity);
+                const validAccessories = item.teamAssignments.accessories?.filter(a =>
+                    a.accessories_name && a.accessories_name !== "N/A" && a.quantity
+                ) || [];
 
-                if (validGlass.length || validCaps.length || validBoxes.length || validPumps.length || validMarketing.length) {
+
+
+                if (validGlass.length || validCaps.length || validBoxes.length || validPumps.length || validAccessories.length) {
                     hasValidItems = true;
 
                     formattedItems.push({
@@ -529,21 +533,21 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                                 status: 'Pending'
                             }
                         })),
-                        marketing: validMarketing.map(m => ({
-                            marketing_name: m.marketing_name,
-                            quantity: parseInt(m.quantity, 10) || 0,
-                            campaign_type: m.campaign_type || '',
-                            target_audience: m.target_audience || '',
-                            budget: m.budget || '',
-                            timeline: m.timeline || '',
-                            team: m.team || 'Marketing - Bangalore',
+                        accessories: validAccessories.map(a => ({
+                            accessories_name: a.accessories_name,
+                            quantity: parseInt(a.quantity, 10) || 0,
+                            rate: a.rate || '',
+                            accessory_type: a.accessory_type || '',
+                            material: a.material || '',
+                            team: a.team || 'Accessories',
                             status: 'Pending',
                             team_tracking: {
                                 total_completed_qty: 0,
                                 completed_entries: [],
                                 status: 'Pending'
                             }
-                        })),
+                        }))
+
                     });
                 }
             }

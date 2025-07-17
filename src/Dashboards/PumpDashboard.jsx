@@ -17,20 +17,7 @@ const PumpDashboard = () => {
   const [activeTab, setActiveTab] = useState('liveOrders');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout , user } = useAuth();
-    const { pendingOrderBuffer, clearTeamBuffer } = useSocket();
-  
-    useEffect(() => {
-      if (activeTab === 'liveOrders') {
-        if (pendingOrderBuffer.pumps.length > 0) {
-          console.log('🔁 Replaying buffered GLASS orders:', pendingOrderBuffer.pumps.length);
-          pendingOrderBuffer.pumps.forEach(order =>
-            window.dispatchEvent(new CustomEvent('socket-new-order', { detail: order }))
-          );
-          clearTeamBuffer('pumps');
-        }
-      }
-    }, [activeTab]);
+  const { logout, user } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -59,7 +46,6 @@ const PumpDashboard = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD' },
     { id: 'liveOrders', label: 'LIVE ORDERS' },
     { id: 'pastOrders', label: 'PAST ORDERS' },
   ];
@@ -160,12 +146,10 @@ const PumpDashboard = () => {
         </header>
         <main className="flex-1 p-4 overflow-hidden">
           <div className="bg-white rounded-lg shadow-md p-6 h-full flex flex-col">
-            {activeTab === 'dashboard' ? (
-              <DispatcherInventoryDashboard />
-            ) : activeTab === 'liveOrders' ? (
-             <PumpOrders orderType="pending" />
+            {activeTab === 'liveOrders' ? (
+              <PumpOrders orderType="pending" />
             ) : (
-             <PumpOrders orderType="completed"/>
+              <PumpOrders orderType="completed" />
             )}
           </div>
         </main>

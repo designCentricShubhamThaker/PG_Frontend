@@ -15,6 +15,7 @@ import {
 import UpdateBoxQty from '../updateQuanityComponents/updateBoxQty.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
+
 const BoxOrders = ({ orderType }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -42,10 +43,9 @@ const BoxOrders = ({ orderType }) => {
     };
 
     const isItemCompleted = (item) => {
-        // FIXED: Check boxes assignments instead of glass
-        const boxAssignments = item.team_assignments?.boxes || [];
-        if (boxAssignments.length === 0) return false;
-        return boxAssignments.every(assignment => getRemainingQty(assignment) === 0);
+        const boxesAssignments = item.team_assignments?.boxes || [];
+        if (boxesAssignments.length === 0) return false;
+        return boxesAssignments.every(assignment => getRemainingQty(assignment) === 0);
     };
 
     const isOrderCompleted = (order) => {
@@ -67,97 +67,108 @@ const BoxOrders = ({ orderType }) => {
         return updatedOrder;
     };
 
-    // FIXED: Check for boxes assignments instead of glass
-    const hasBoxAssignments = (order) => {
+    const hasBoxesAssignments = (order) => {
         return order.item_ids?.some(item =>
             item.team_assignments?.boxes && item.team_assignments.boxes.length > 0
         );
     };
 
+    // Helper function to update both caches
+    const updateBothCaches = (orderData) => {
+        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        
+        // Always update both caches
+        ['pending', 'completed'].forEach(type => {
+            if (hasTeamOrdersInLocalStorage(type, TEAMS.BOXES)) {
+                let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.BOXES);
+                
+                // Remove from this cache first
+                cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
+                
+                // Add to appropriate cache
+                if (orderStatus === type) {
+                    cachedOrders = [orderData, ...cachedOrders];
+                }
+                
+                saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.BOXES);
+            }
+        });
+    };
+
     const handleNewOrder = useCallback((orderData) => {
-        console.log('📦 Box team received new order:', orderData);
-
         if (!orderData.orderData) return;
-
         const newOrder = orderData.orderData;
 
-        // FIXED: Check for box assignments instead of glass
-        if (!hasBoxAssignments(newOrder)) {
-            console.log('Order has no box assignments, ignoring');
+        if (!hasBoxesAssignments(newOrder)) {
+            console.log('Order has no boxes assignments, ignoring');
             return;
         }
 
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
-        if (orderStatus !== currentViewType) {
-            console.log(`Order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-            return;
+        // Update both caches regardless of current view
+        updateBothCaches(newOrder);
+
+        // Only update current view's state if it matches
+        if (orderStatus === currentViewType) {
+            setOrders(prevOrders => {
+                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+                let updatedOrders;
+                if (existingOrderIndex >= 0) {
+                    updatedOrders = [...prevOrders];
+                    updatedOrders[existingOrderIndex] = newOrder;
+                } else {
+                    updatedOrders = [newOrder, ...prevOrders];
+                    console.log('Added new order:', newOrder.order_number);
+                }
+                return updatedOrders;
+            });
         }
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
-            let updatedOrders;
-            if (existingOrderIndex >= 0) {
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = newOrder;
-                console.log('Updated existing order:', newOrder.order_number);
-            } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('Added new order:', newOrder.order_number);
-            }
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.BOXES);
-
-            return updatedOrders;
-        });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
-        console.log('✏️ Box team received order update:', updateData);
-
         if (!updateData.orderData) return;
-
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
+        if (wasRemoved || !hasAssignments || !hasBoxesAssignments(updatedOrder)) {
+            // Remove from both caches
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.BOXES)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.BOXES);
+                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.BOXES);
+                }
+            });
+
+            // Update current view state
+            setOrders(prevOrders => {
+                const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
+                return filteredOrders;
+            });
+            return;
+        }
+
+        // Update both caches
+        updateBothCaches(updatedOrder);
+
+        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
+        // Update current view state
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-
-            if (wasRemoved || !hasAssignments) {
-                console.log('Order removed from box team:', updatedOrder.order_number);
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.BOXES);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            if (!hasBoxAssignments(updatedOrder)) {
-                console.log('Updated order has no box assignments, removing if exists');
-                if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.BOXES);
-                    return filteredOrders;
-                }
-                return prevOrders;
-            }
-
-            const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-            const currentViewType = orderType.toLowerCase();
-
+            
             if (orderStatus !== currentViewType) {
-                console.log(`Updated order status (${orderStatus}) doesn't match current view (${currentViewType})`);
-
+                // Remove from current view if status doesn't match
                 if (existingOrderIndex >= 0) {
-                    const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(filteredOrders, orderType, TEAMS.BOXES);
-                    return filteredOrders;
+                    return prevOrders.filter(order => order._id !== updatedOrder._id);
                 }
                 return prevOrders;
             }
 
+            // Add/update in current view if status matches
             let updatedOrders;
             if (existingOrderIndex >= 0) {
                 updatedOrders = [...prevOrders];
@@ -167,20 +178,11 @@ const BoxOrders = ({ orderType }) => {
                 updatedOrders = [updatedOrder, ...prevOrders];
                 console.log('Added updated order to current view:', updatedOrder.order_number);
             }
-
-            saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.BOXES);
-
             return updatedOrders;
         });
-
-        if (updateData.editedFields && updateData.editedFields.length > 0) {
-            console.log(`Order ${updatedOrder.order_number} was updated. Modified fields:`, updateData.editedFields);
-            toast.success("order progress updated !")
-        }
     }, [orderType]);
 
     const handleOrderDeleted = useCallback((deleteData) => {
-        console.log('🗑️ Box team received order delete notification:', deleteData);
         try {
             const { orderId, orderNumber } = deleteData;
             if (!orderId) {
@@ -188,21 +190,23 @@ const BoxOrders = ({ orderType }) => {
                 return;
             }
 
-            setOrders(prevOrders => {
-                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
-                saveTeamOrdersToLocalStorage(updatedOrders, orderType, TEAMS.BOXES);
-                return updatedOrders;
+            // Remove from both caches
+            ['pending', 'completed'].forEach(type => {
+                if (hasTeamOrdersInLocalStorage(type, TEAMS.BOXES)) {
+                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.BOXES);
+                    cachedOrders = cachedOrders.filter(order => order._id !== orderId);
+                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.BOXES);
+                }
             });
 
+            // Update current view state
+            setOrders(prevOrders => {
+                return prevOrders.filter(order => order._id !== orderId);
+            });
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-
-            deleteOrderFromLocalStorage(orderId);
-
-            toast.success(`Order #${orderNumber} has been deleted`);
-            console.log(`✅ Order #${orderNumber} removed from box team view`);
-            s
+            deleteOrderFromLocalStorage(orderId, TEAMS.BOXES);
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
@@ -221,21 +225,7 @@ const BoxOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
- useEffect(() => {
-        const handleBufferedOrder = (e) => {
-            console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-            handleNewOrder(e.detail);
-        };
-
-        window.addEventListener('socket-new-order', handleBufferedOrder);
-
-        return () => {
-            window.removeEventListener('socket-new-order', handleBufferedOrder);
-        };
-    }, [handleNewOrder]);
-
-
-    // FIXED: Function name changed from fetchGlassOrders to fetchBoxOrders
+ 
     const fetchBoxOrders = async (type = orderType) => {
         try {
             setLoading(true);
