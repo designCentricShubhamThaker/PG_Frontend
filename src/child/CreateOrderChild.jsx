@@ -75,7 +75,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     if (accessories.length === 0) loadItems('accessories');
   }, []);
 
-  const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setBoxSearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
+  const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setAccessorySearches, setBoxSearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
 
   const [orderItems, setOrderItems] = useState([
     {
@@ -429,7 +429,28 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     setOrderItems(updatedItems);
   };
 
-  const handleSubmit = (e) => handleSubmitOrder({ e, orderNumber, dispatcherName, customerName, orderItems, setIsSubmitting, setError, addOrderToLocalStorage, isConnected, notifyTeam, onCreateOrder, resetForm: () => resetForm(setOrderNumber, setDispatcherName, setCustomerName, setOrderItems), onClose });
+  const handleSubmit = (e) => handleSubmitOrder({
+  e,
+  orderNumber,
+  dispatcherName,
+  customerName,
+  orderItems,
+  setIsSubmitting,
+  setError,
+  addOrderToLocalStorage,
+  isConnected,
+  notifyTeam,
+  onCreateOrder,
+  resetForm: () =>
+    resetForm({
+      setOrderNumber,
+      setDispatcherName,
+      setCustomerName,
+      setOrderItems
+    }),
+  onClose
+});
+
 
   return (
     <Dialog open={true} onClose={onClose} className="relative z-10">

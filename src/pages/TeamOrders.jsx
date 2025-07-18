@@ -36,14 +36,15 @@ const TeamOrders = ({ orderType }) => {
   const { socket, isConnected, notifyOrderDelete } = useSocket();
   const { user } = useAuth();
 
-  // Fetch orders with user-specific filtering
   const fetchOrders = async (type = orderType) => {
     try {
       setLoading(true);
+      setError(null); // Reset error state
 
       // Check user-specific localStorage cache
       if (hasOrdersInLocalStorage(type, TEAMS.MARKETING, user.username)) {
         const cachedOrders = getOrdersFromLocalStorage(type, TEAMS.MARKETING, user.username);
+        console.log(`📦 Loaded ${cachedOrders.length} cached orders for user ${user.username}`);
         setOrders(cachedOrders);
         setLoading(false);
         return;
@@ -52,19 +53,59 @@ const TeamOrders = ({ orderType }) => {
       const response = await axios.get(
         `http://localhost:5000/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
       );
-      console.log(response)
 
       const fetchedOrders = response.data.data || [];
+      console.log(`📡 Fetched ${fetchedOrders.length} orders from API for user ${user.username}`);
 
       // Save to user-specific localStorage
       saveOrdersToLocalStorage(fetchedOrders, type, TEAMS.MARKETING, user.username);
       setOrders(fetchedOrders);
       setLoading(false);
     } catch (err) {
+      console.error('Error fetching orders:', err);
       setError('Failed to fetch orders: ' + (err.response?.data?.message || err.message));
       setLoading(false);
     }
   };
+
+  // Fix 2: Update the filtering logic to ensure proper display
+  useEffect(() => {
+    console.log(`🔍 Filtering ${orders.length} orders for type: ${orderType}`);
+
+    if (orders.length === 0) {
+      setFilteredOrders([]);
+      return;
+    }
+
+    let filteredByType = orders.filter(order => {
+      // Ensure order belongs to current user
+      if (order.created_by !== user.username) {
+        return false;
+      }
+
+      const completionPercentage = calculateCompletionPercentage(order);
+      const isCompleted = completionPercentage === 100 || order.order_status === 'Completed';
+
+      if (orderType === 'pending') {
+        return !isCompleted;
+      }
+      if (orderType === 'completed') {
+        return isCompleted;
+      }
+      return true;
+    });
+
+    if (searchTerm) {
+      filteredByType = filteredByType.filter(order =>
+        order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.dispatcher_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    console.log(`✅ Filtered to ${filteredByType.length} orders for display`);
+    setFilteredOrders(filteredByType);
+  }, [orders, orderType, searchTerm, user.username]);
 
   const getAssignedTeams = (order) => {
     const teams = new Set();
@@ -195,104 +236,97 @@ const TeamOrders = ({ orderType }) => {
     }
 
     setOrders(prevOrders => {
-      const updatedOrders = prevOrders.map(order => {
-        if (order.order_number === orderNumber) {
+      const orderIndex = prevOrders.findIndex(order => order.order_number === orderNumber);
 
-          if (order.created_by !== user.username) {
-            return order;
-          }
+      if (orderIndex === -1) {
+        console.warn(`Order ${orderNumber} not found in current orders list`);
+        return prevOrders;
+      }
 
-          // Get the updated order data
-          const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
+      const order = prevOrders[orderIndex];
 
-          // Merge the order data similar to dispatcher logic
-          const mergedOrder = {
-            ...order,
-            ...updatedOrder,
-            item_ids: order.item_ids.map(existingItem => {
-              const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
-              if (!updatedItem) return existingItem;
+      // Ensure order belongs to current user
+      if (order.created_by !== user.username) {
+        console.log(`⏭️ Progress update for order ${orderNumber} not for current user, skipping`);
+        return prevOrders;
+      }
 
-              // Merge team assignments deeply
-              const mergedAssignments = {};
-              const allTeams = new Set([
-                ...Object.keys(existingItem.team_assignments || {}),
-                ...Object.keys(updatedItem.team_assignments || {})
-              ]);
+      // Get the updated order data
+      const updatedOrder = progressData.orderData || progressData.updatedOrder || order;
 
-              allTeams.forEach(team => {
-                const existingTeamAssignments = existingItem.team_assignments?.[team] || [];
-                const updatedTeamAssignments = updatedItem.team_assignments?.[team] || [];
+      // Merge the order data
+      const mergedOrder = {
+        ...order,
+        ...updatedOrder,
+        item_ids: order.item_ids.map(existingItem => {
+          const updatedItem = updatedOrder.item_ids?.find(ui => ui._id === existingItem._id);
+          if (!updatedItem) return existingItem;
 
-                const mergedTeamAssignments = existingTeamAssignments.map(assign => {
-                  const updated = updatedTeamAssignments.find(u => u._id === assign._id);
-                  return updated ? { ...assign, ...updated } : assign;
-                });
+          // Merge team assignments deeply
+          const mergedAssignments = {};
+          const allTeams = new Set([
+            ...Object.keys(existingItem.team_assignments || {}),
+            ...Object.keys(updatedItem.team_assignments || {})
+          ]);
 
-                updatedTeamAssignments.forEach(updated => {
-                  if (!mergedTeamAssignments.find(assign => assign._id === updated._id)) {
-                    mergedTeamAssignments.push(updated);
-                  }
-                });
+          allTeams.forEach(team => {
+            const existingTeamAssignments = existingItem.team_assignments?.[team] || [];
+            const updatedTeamAssignments = updatedItem.team_assignments?.[team] || [];
 
-                mergedAssignments[team] = mergedTeamAssignments;
-              });
+            const mergedTeamAssignments = existingTeamAssignments.map(assign => {
+              const updated = updatedTeamAssignments.find(u => u._id === assign._id);
+              return updated ? { ...assign, ...updated } : assign;
+            });
 
-              return {
-                ...existingItem,
-                ...updatedItem,
-                team_assignments: mergedAssignments
-              };
-            })
+            updatedTeamAssignments.forEach(updated => {
+              if (!mergedTeamAssignments.find(assign => assign._id === updated._id)) {
+                mergedTeamAssignments.push(updated);
+              }
+            });
+
+            mergedAssignments[team] = mergedTeamAssignments;
+          });
+
+          return {
+            ...existingItem,
+            ...updatedItem,
+            team_assignments: mergedAssignments
           };
+        })
+      };
 
-          const completionPercentage = calculateCompletionPercentage(mergedOrder);
-          const previousStatus = order.order_status;
-          const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
+      const completionPercentage = calculateCompletionPercentage(mergedOrder);
+      const previousStatus = order.order_status;
+      const newStatus = completionPercentage === 100 ? 'Completed' : 'Pending';
 
-          const finalOrder = {
-            ...mergedOrder,
-            order_status: newStatus
-          };
+      const finalOrder = {
+        ...mergedOrder,
+        order_status: newStatus
+      };
 
-          console.log(`📊 Team Order ${orderNumber} Progress: ${completionPercentage}% - Status: ${newStatus}`);
-          if (previousStatus !== newStatus) {
-            if (newStatus === 'Completed' && orderType === 'pending') {
-              moveOrderBetweenUserCategories(finalOrder, 'pending', 'completed');
-              toast.success(`Order #${orderNumber} has been completed!`);
-            } else if (newStatus === 'Pending' && previousStatus === 'Completed' && orderType === 'completed') {
-              moveOrderBetweenUserCategories(finalOrder, 'completed', 'pending');
-              toast.info(`Order #${orderNumber} moved back to pending`);
-            }
-          }
-          if (
-            user.role === 'dispatcher' ||
-            user.team === progressData.team ||
-            user.team === TEAMS.MARKETING // ✅ explicitly include marketing
-          ) {
-            updateDispatcherOrderInLocalStorage(finalOrder, user.team, user.username);
-           
-            console.log("✅ Order updated in localStorage");
-          } else {
-            console.log("⛔ Progress update ignored for this user/team.");
-          }
-          updateDispatcherOrderInLocalStorage(finalOrder, TEAMS.MARKETING, user.username);
-          const wasUpdated = updateDispatcherOrderInLocalStorage(finalOrder, TEAMS.MARKETING, user.username);
+      console.log(`📊 Order ${orderNumber} Progress: ${completionPercentage}% - Status: ${newStatus}`);
 
-          if (wasUpdated) {
-            console.log("✅ Order updated in localStorage");
-          } else {
-            console.warn("⚠️ Order not updated — maybe not found in localStorage?");
-          }
-
-
-          return finalOrder;
+      // Handle status changes
+      if (previousStatus !== newStatus) {
+        if (newStatus === 'Completed' && orderType === 'pending') {
+          moveOrderBetweenUserCategories(finalOrder, 'pending', 'completed');
+          toast.success(`Order #${orderNumber} has been completed!`);
+        } else if (newStatus === 'Pending' && previousStatus === 'Completed' && orderType === 'completed') {
+          moveOrderBetweenUserCategories(finalOrder, 'completed', 'pending');
+          toast.info(`Order #${orderNumber} moved back to pending`);
         }
-        return order;
-      });
+      }
 
-      // Save the updated orders to localStorage with user-specific key
+      // Update localStorage
+      updateDispatcherOrderInLocalStorage(finalOrder, TEAMS.MARKETING, user.username);
+
+      // Update the orders array
+      const updatedOrders = [...prevOrders];
+      updatedOrders[orderIndex] = finalOrder;
+
+      // Save updated orders to localStorage
       saveOrdersToLocalStorage(updatedOrders, orderType, TEAMS.MARKETING, user.username);
+
       return updatedOrders;
     });
   }, [orderType, user.username]);
@@ -300,33 +334,29 @@ const TeamOrders = ({ orderType }) => {
   const handleNewOrder = useCallback((orderData) => {
     try {
       const { orderData: newOrder, orderNumber } = orderData;
+      console.log(`🆕 Received new order: ${orderNumber}`, newOrder);
+
       if (!newOrder || !newOrder._id) {
+        console.warn('Invalid new order data received');
         return;
       }
-
-      // Check if order is created by current user
       if (newOrder.created_by !== user.username) {
+        console.log(`⏭️ Order ${orderNumber} not created by current user (${user.username}), skipping`);
         return;
       }
-
-      const relevantToTeam = newOrder.item_ids?.some(item =>
-        item.team_assignments && Object.keys(item.team_assignments).includes(TEAMS.MARKETING)
-      );
-
-      if (!relevantToTeam) {
-        return;
-      }
+      console.log(`✅ Order ${orderNumber} created by marketing team member ${user.username}`);
 
       if (orderType === 'pending') {
         setOrders(prevOrders => {
           const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
           let updatedOrders;
           if (existingOrderIndex !== -1) {
             updatedOrders = [...prevOrders];
             updatedOrders[existingOrderIndex] = newOrder;
+            console.log(`🔄 Updated existing order ${orderNumber} in pending list`);
           } else {
             updatedOrders = [newOrder, ...prevOrders];
+            console.log(`➕ Added new order ${orderNumber} to pending list`);
           }
 
           saveOrdersToLocalStorage(updatedOrders, 'pending', TEAMS.MARKETING, user.username);
@@ -347,19 +377,7 @@ const TeamOrders = ({ orderType }) => {
         return;
       }
 
-      // Check if order belongs to current user
-      if (updatedOrder.created_by !== user.username) {
-        return;
-      }
-
-      const relevantToTeam = updatedOrder.item_ids?.some(item =>
-        item.team_assignments && Object.keys(item.team_assignments).includes(TEAMS.MARKETING)
-      );
-
-      if (!relevantToTeam) {
-        return;
-      }
-
+  
       setOrders(prevOrders => {
         const updatedOrders = prevOrders.map(order =>
           order._id === updatedOrder._id ? updatedOrder : order
@@ -461,7 +479,7 @@ const TeamOrders = ({ orderType }) => {
     toast.success("Order created successfully!");
   };
 
-
+ 
   const handleDelete = async (orderId) => {
     try {
       const orderToDelete = orders.find(order => order._id === orderId);

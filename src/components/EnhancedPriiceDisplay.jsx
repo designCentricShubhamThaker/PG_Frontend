@@ -66,7 +66,7 @@ const ModernPriceDisplay = ({ orderItems, exchangeRates, isLoadingRates, orderNu
         <div className="flex items-center gap-3">
           <Receipt className="h-5 w-5 text-white" />
           <div>
-            <h3 className="text-white text-xl font-bold tracking-wide">Order Invoice</h3>
+            <h3 className="text-white text-xl font-bold tracking-wide">Order Summary</h3>
             <p className="text-orange-100 text-sm">#{orderNumber}</p>
           </div>
         </div>

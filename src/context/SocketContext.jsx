@@ -20,8 +20,6 @@ export const SocketProvider = ({ children }) => {
         accessories: [],
     });
 
-    
-
 
     useEffect(() => {
         const loadDataFromStorage = () => {

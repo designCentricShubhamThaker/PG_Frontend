@@ -76,7 +76,7 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
         if (accessories.length === 0) loadItems('accessories');
     }, []);
 
-    const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setBoxSearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
+    const onDuplicate = () => handleDuplicateOrder({ duplicateOrderNumber, setDuplicateError, setIsSearching, setDispatcherName, setCustomerName, setOrderItems, setGlassSearches, setCapSearches, setBoxSearches,setAccessorySearches, setPumpSearches, setShowDuplicateSection, setDuplicateOrderNumberValue: setDuplicateOrderNumber });
 
     const [orderItems, setOrderItems] = useState([
         {
@@ -439,10 +439,6 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
         setError('');
 
         try {
-            // Debug user object first
-            console.log('User object:', user);
-            console.log('User team:', user?.team);
-            console.log('User username:', user?.username);
 
             if (!orderNumber || !dispatcherName || !customerName) {
                 setError('Please fill in all required fields: order number, dispatcher name, and customer name');
@@ -468,8 +464,6 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                 const validAccessories = item.teamAssignments.accessories?.filter(a =>
                     a.accessories_name && a.accessories_name !== "N/A" && a.quantity
                 ) || [];
-
-
 
                 if (validGlass.length || validCaps.length || validBoxes.length || validPumps.length || validAccessories.length) {
                     hasValidItems = true;
@@ -558,7 +552,6 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                 return;
             }
 
-            // Ensure values are properly formatted
             const orderData = {
                 order_number: String(orderNumber || '').trim(),
                 dispatcher_name: String(dispatcherName || '').trim(),
@@ -599,7 +592,12 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                 }
 
                 if (onCreateOrder) onCreateOrder();
-                resetForm();
+                resetForm({
+                    setOrderNumber,
+                    setDispatcherName,
+                    setCustomerName,
+                    setOrderItems
+                });
                 onClose();
             } else {
                 setError('Error creating order: ' + (response.data.message || 'Unknown error'));

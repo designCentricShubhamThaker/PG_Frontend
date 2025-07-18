@@ -11,7 +11,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
     if (order?.item_ids && Array.isArray(order.item_ids)) {
       setFilteredItems(order.item_ids);
     }
-    
+
   }, [order]);
 
 
@@ -706,20 +706,28 @@ const ViewOrderComponent = ({ order, onClose }) => {
         return null;
       }
 
+      // ADD THIS RETURN STATEMENT
       return item.team_assignments.caps.map((cap, idx) => {
-        const completedQty = cap.team_tracking?.total_completed_qty || 0;
+        // Determine which tracking to use based on process
+        const isAssembly = cap.process?.toLowerCase().includes('assembly');
+        const tracking = isAssembly ? cap.assembly_tracking : cap.metal_tracking;
+
+        const completedQty = tracking?.total_completed_qty || 0;
         const completionPercentage = cap.quantity > 0
           ? Math.round((completedQty / cap.quantity) * 100)
           : 0;
 
         return (
-          <div key={cap._id} className={`${idx > 0 || renderGlassAssignments() ? 'mt-4 pt-4 border-t ' + itemBorderColor : ''}`}>
+          <div
+            key={cap._id}
+            className={`${idx > 0 || renderGlassAssignments() ? 'mt-4 pt-4 border-t ' + itemBorderColor : ''}`}
+          >
             <div className="flex flex-wrap justify-between items-center mb-3">
               <div className="w-full md:w-auto flex items-center space-x-2 mb-2 md:mb-0">
                 <span className={`px-2 py-1 ${index % 2 === 0 ? 'bg-orange-100 text-orange-700' : 'bg-orange-100 text-orange-700'} rounded-md text-sm font-medium`}>
                   Cap
                 </span>
-                <h4 className="font-medium text-gray-800">{cap.cap_name}</h4>
+                <h4 className="font-medium text-gray-800">{cap.cap_name} ({cap.process})</h4>
               </div>
               <div>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${cap.status === 'Completed'
@@ -731,22 +739,18 @@ const ViewOrderComponent = ({ order, onClose }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
               <div>
                 <p className="text-sm text-gray-500 mb-1">Quantity</p>
                 <p className="text-sm font-medium">{cap.quantity}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Neck Size</p>
-                <p className="text-sm font-medium">{cap.neck_size}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">Process</p>
                 <p className="text-sm font-medium">{cap.process}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">Material</p>
-                <p className="text-sm font-medium">{cap.material}</p>
+                <p className="text-sm text-gray-500 mb-1">Neck Size</p>
+                <p className="text-sm font-medium">{cap.neck_size}</p>
               </div>
             </div>
 
@@ -906,7 +910,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
       (item.team_assignments.printing && item.team_assignments.printing.length > 0) ||
       (item.team_assignments.coating && item.team_assignments.coating.length > 0) ||
       (item.team_assignments.foiling && item.team_assignments.foiling.length > 0) ||
-      (item.team_assignments.frosting && item.team_assignments.frosting.length > 0) 
+      (item.team_assignments.frosting && item.team_assignments.frosting.length > 0)
 
     if (!hasAssignments) return null;
 
