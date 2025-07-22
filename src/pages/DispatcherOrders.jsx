@@ -1,4 +1,5 @@
 import { Plus, Eye, CheckCircle, ChevronRight, Search } from 'lucide-react';
+import { TbFileInvoice } from "react-icons/tb";
 import { MdDeleteOutline } from "react-icons/md";
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
@@ -16,6 +17,7 @@ import {
 } from '../utils/localStorageUtils';
 import UpdateOrderChild from '../child/UpdateOrderChild';
 import { useSocket } from '../context/SocketContext';
+import InvoiceModal from '../child/InvoiceChild.jsx';
 
 const DispatcherOrders = ({ orderType }) => {
   const [createOrder, setCreateOrder] = useState(false);
@@ -29,6 +31,7 @@ const DispatcherOrders = ({ orderType }) => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [updateOrderDetails, setUpdateOrderDetails] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false)
 
   const { socket, isConnected, notifyOrderDelete } = useSocket();
 
@@ -569,12 +572,17 @@ const DispatcherOrders = ({ orderType }) => {
   const handleClose = () => {
     setShowModal(false);
     setCreateOrder(false);
+    setShowInvoice(false)
     setUpdateOrderDetails(false);
   };
 
   const handleEdit = (rowData) => {
     setSelectedOrder(rowData);
     setUpdateOrderDetails(true);
+  };
+  const handleInvoice = (rowData) => {
+    setSelectedOrder(rowData);
+    setShowInvoice(true)
   };
 
   const handleUpdateOrder = (type = orderType) => {
@@ -658,6 +666,8 @@ const DispatcherOrders = ({ orderType }) => {
                   <th className="px-2 py-3 text-center font-medium w-16">Completed</th>
                   <th className="px-2 py-3 text-center font-medium w-12">View</th>
                   <th className="px-2 py-3 text-center font-medium w-12">Edit</th>
+                  {orderType === "completed" &&   <th className="px-2 py-3 text-center font-medium w-12">Invoice</th> }
+                 
                   <th className="px-2 py-3 text-center font-medium w-12">Delete</th>
                 </tr>
               </thead>
@@ -726,6 +736,18 @@ const DispatcherOrders = ({ orderType }) => {
                             <FiEdit size={16} />
                           </button>
                         </td>
+                        {order.order_status === "Completed" && (
+                          <td className="px-2 py-3 text-center">
+                            <button
+                              className="flex items-center cursor-pointer justify-center p-1.5 bg-red-600 rounded-sm text-white hover:bg-red-700 transition-colors duration-200 shadow-sm mx-auto"
+                              aria-label="Delete order"
+                              onClick={() => handleInvoice(order)}
+                            >
+                              <TbFileInvoice size={16} />
+                            </button>
+                          </td>
+                        )}
+
                         <td className="px-2 py-3 text-center">
                           <button
                             className="flex items-center cursor-pointer justify-center p-1.5 bg-red-600 rounded-sm text-white hover:bg-red-700 transition-colors duration-200 shadow-sm mx-auto"
@@ -826,6 +848,12 @@ const DispatcherOrders = ({ orderType }) => {
       )}
       {showModal && (
         <ViewOrderComponent
+          onClose={handleClose}
+          order={selectedOrder}
+        />
+      )}
+      {showInvoice && (
+        <InvoiceModal
           onClose={handleClose}
           order={selectedOrder}
         />
