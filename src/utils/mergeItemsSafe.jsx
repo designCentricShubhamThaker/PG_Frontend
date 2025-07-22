@@ -44,4 +44,3 @@ export const mergeItemAssignmentsSafe = (
     team_assignments: finalTeamAssignments
   };
 };
-
