@@ -10,7 +10,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
-import { DECORATION_SEQUENCES } from '../utils/sequence.jsx';
+import { DECORATION_SEQUENCES } from '../utils/sequence'; // Import this
 
 const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
@@ -89,8 +89,6 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         }
     };
 
-
-
     const preserveGlassItemDetails = (printingAssignment, allGlassAssignments) => {
         const glassItemId = printingAssignment.glass_item_id?._id || printingAssignment.glass_item_id;
         const fullGlassItem = allGlassAssignments.find(glassAssignment => {
@@ -149,7 +147,6 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             for (let i = 0; i < updates.length; i++) {
                 const assignment = assignments[i];
                 const remaining = getRemainingQty(assignment);
-
                 if (assignment.todayQty > remaining) {
                     setError(`Quantity for ${assignment.printing_name} exceeds remaining amount (${remaining})`);
                     setLoading(false);
@@ -167,48 +164,49 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
             const updatedOrder = response.data.data.order;
 
-            const targetAssignment = updates[0];
+            const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
+            const hasCompletedWork = completedUpdates.length > 0;
+            const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
             const targetGlassItem = targetAssignment?.glass_item_id;
 
+            // ✅ FIXED: Apply proper filtering with sequence validation
             const filteredUpdatedOrder = {
                 ...updatedOrder,
                 item_ids: updatedOrder.item_ids.map(item => {
                     const glassAssignments = item.team_assignments?.glass || [];
-                    const existingPrintingAssignments = item.team_assignments?.printing || [];
 
-                    // Get completed glass assignments from backend
+                    // Only include glass assignments that are completed
                     const completedGlass = glassAssignments.filter(g =>
                         g.team_tracking?.total_completed_qty >= g.quantity
                     );
 
-                    // Process printing assignments more carefully
-                    const validPrinting = existingPrintingAssignments
-                        .map(p => {
-                            const glassId = p.glass_item_id?._id || p.glass_item_id;
+                    // ✅ CRITICAL FIX: Apply sequence validation to printing assignments
+                    const validPrinting = (item.team_assignments?.printing || [])
+                        .filter(printingAssignment => {
+                            const glassId = printingAssignment.glass_item_id?._id || printingAssignment.glass_item_id;
 
-                            // Preserve glass item details
-                            const enhancedAssignment = preserveGlassItemDetails(p, glassAssignments);
-
-                            // Check if this glass is done
+                            // Check if glass is completed
                             const isGlassDone = glassAssignments.some(g =>
                                 g._id?.toString() === glassId?.toString() &&
                                 g.team_tracking?.total_completed_qty >= g.quantity
                             );
 
-                            // Check if previous teams are completed
+                            if (!isGlassDone) return false;
+
+                            // ✅ CRITICAL: Check if previous teams in sequence are completed
                             const prevDone = isPreviousTeamsCompleted(item, 'printing', glassId, DECORATION_SEQUENCES);
+                            
+                            console.log('🔍 Sequence validation:', {
+                                glassId: glassId?.toString(),
+                                printingName: printingAssignment.printing_name,
+                                isGlassDone,
+                                prevDone,
+                                shouldInclude: isGlassDone && prevDone
+                            });
 
-                            // CRITICAL FIX: Keep existing assignments with progress, even if prev teams aren't done
-                            const hasProgress = (p.team_tracking?.total_completed_qty || 0) > 0;
-
-                            // Keep assignment if:
-                            // 1. Glass is done AND previous teams are done (normal flow), OR
-                            // 2. Assignment already has progress (preserve existing work)
-                            const shouldKeep = (isGlassDone && prevDone) || hasProgress;
-
-                            return shouldKeep ? enhancedAssignment : null;
+                            return prevDone;
                         })
-                        .filter(Boolean); // Remove null entries
+                        .map(f => preserveGlassItemDetails(f, glassAssignments));
 
                     return {
                         ...item,
@@ -221,9 +219,16 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 }).filter(item => item.team_assignments?.printing?.length > 0)
             };
 
+            console.log('🎯 Filtered order for local storage:', {
+                originalItems: updatedOrder.item_ids.length,
+                filteredItems: filteredUpdatedOrder.item_ids.length,
+                targetGlassItem: targetGlassItem?._id || targetGlassItem
+            });
+
             updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.PRINTING);
 
-            if (notifyProgressUpdate && targetGlassItem) {
+            // ✅ Notify progress update even for partial completions
+            if (notifyProgressUpdate && updates.length > 0 && targetGlassItem) {
                 const glassItemId = targetGlassItem?._id || targetGlassItem;
 
                 notifyProgressUpdate({
@@ -232,7 +237,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                     team: user.team,
                     updateSource: 'printing_update',
                     targetGlassItem: glassItemId,
-                    hasCompletedWork: updates.some(u => u.newStatus === 'Completed'),
+                    hasCompletedWork,
                     updates: updates.map(u => ({
                         assignmentId: u.assignmentId,
                         quantity: u.newEntry.quantity,
@@ -240,7 +245,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         newTotalCompleted: u.newTotalCompleted,
                         newStatus: u.newStatus,
                         glass_item_id: u.glass_item_id,
-                        printing_name: u.printing_name
+                        printing_name: u.printing_name // Fixed typo: was frosting_name
                     })),
                     updatedOrder: filteredUpdatedOrder,
                     customerName: orderData.customer_name,
@@ -260,7 +265,7 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         } finally {
             setLoading(false);
         }
-    }
+    };
 
 
 

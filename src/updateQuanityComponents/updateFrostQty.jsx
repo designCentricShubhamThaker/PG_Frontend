@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
+import { DECORATION_SEQUENCES } from '../utils/sequence.jsx';
 
 const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
   const [assignments, setAssignments] = useState([]);
@@ -170,26 +171,42 @@ const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
       const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
       const targetGlassItem = targetAssignment?.glass_item_id;
 
+      // ✅ FIXED: Apply proper filtering with sequence validation
       const filteredUpdatedOrder = {
         ...updatedOrder,
         item_ids: updatedOrder.item_ids.map(item => {
           const glassAssignments = item.team_assignments?.glass || [];
 
+          // Only include glass assignments that are completed
           const completedGlass = glassAssignments.filter(g =>
             g.team_tracking?.total_completed_qty >= g.quantity
           );
 
+          // ✅ CRITICAL FIX: Apply sequence validation to frosting assignments
           const validFrosting = (item.team_assignments?.frosting || [])
-            .filter(f => {
-              const glassId = f.glass_item_id?._id || f.glass_item_id;
+            .filter(frostingAssignment => {
+              const glassId = frostingAssignment.glass_item_id?._id || frostingAssignment.glass_item_id;
 
+              // Check if glass is completed
               const isGlassDone = glassAssignments.some(g =>
                 g._id?.toString() === glassId?.toString() &&
                 g.team_tracking?.total_completed_qty >= g.quantity
               );
 
-              const prevDone = isPreviousTeamsCompleted(item, 'frosting', glassId);
-              return isGlassDone && prevDone;
+              if (!isGlassDone) return false;
+
+              // ✅ CRITICAL: Check if previous teams in sequence are completed
+              const prevDone = isPreviousTeamsCompleted(item, 'frosting', glassId, DECORATION_SEQUENCES);
+
+              console.log('🔍 Frosting sequence validation:', {
+                glassId: glassId?.toString(),
+                frostingName: frostingAssignment.frosting_name,
+                isGlassDone,
+                prevDone,
+                shouldInclude: isGlassDone && prevDone
+              });
+
+              return prevDone;
             })
             .map(f => preserveGlassItemDetails(f, glassAssignments));
 
@@ -203,6 +220,12 @@ const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
           };
         }).filter(item => item.team_assignments?.frosting?.length > 0)
       };
+
+      console.log('🎯 Filtered order for frosting local storage:', {
+        originalItems: updatedOrder.item_ids.length,
+        filteredItems: filteredUpdatedOrder.item_ids.length,
+        targetGlassItem: targetGlassItem?._id || targetGlassItem
+      });
 
       updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.FROSTING);
 

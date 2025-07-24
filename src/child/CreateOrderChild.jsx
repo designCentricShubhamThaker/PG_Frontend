@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Trash } from 'lucide-react';
-import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
-
-import { boxData } from "../data/boxData.js"
-
 import { addOrderToLocalStorage } from '../utils/localStorageUtils.jsx';
 import { resetForm } from '../utils/resetForm.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
@@ -17,8 +13,6 @@ import EnhancedPriceDisplay from '../components/EnhancedPriiceDisplay.jsx';
 const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
   const { notifyTeam, isConnected, getItemsByType, loadItems } = useSocket();
-
-
   const caps = getItemsByType('caps');
   const pumps = getItemsByType('pumps');
   const glass = getItemsByType('glass');
@@ -28,13 +22,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   const [customerName, setCustomerName] = useState("");
   const [error, setError] = useState("");
   const dispatchers = ["Rajesh Kumar", "Anita Sharma"];
-
   const [filteredGlassData, setFilteredGlassData] = useState(glass);
   const [filteredCapData, setFilteredCapData] = useState(caps);
-  const [filteredBoxData, setFilteredBoxData] = useState(boxData);
   const [filteredPumpData, setFilteredPumpData] = useState(pumps);
   const [filteredAccessoryData, setFilteredAccessoryData] = useState(accessories);
-
   const [glassSearches, setGlassSearches] = useState({});
   const [capSearches, setCapSearches] = useState({});
   const [boxSearches, setBoxSearches] = useState({});
@@ -60,8 +51,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     { key: 'frosting_printing_foiling', label: 'FROSTING + PRINTING + FOILING' }
   ];
   const capProcessOptions = ["Metal - Unassembly", "Non Metal - Unassembly", "Metal - Assembly", "Non Metal - Assembly"];
-
-  const pumpNeckTypeOptions = ["Standard", "Wide", "Narrow", "Custom"];
   const [exchangeRates, setExchangeRates] = useState({
     USD: 0,
     EUR: 0,
@@ -892,8 +881,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  {/* Cap Name - Takes more space on larger screens */}
-                                  <div className="col-span-12 sm:col-span-6 lg:col-span-4">
+                                  {/* Cap Name */}
+                                  <div className="col-span-12 sm:col-span-6 lg:col-span-5">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Cap Name</label>
                                     <div className="relative">
                                       <input
@@ -920,8 +909,8 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredCapData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                placeholder:text-gray-400 z-50"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -946,7 +935,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                   setCapSearches(newSearches);
 
                                                   handleTeamDetailChange(itemIndex, capIndex, 'caps', 'cap_name', capItem.FORMULA);
-                                                  handleTeamDetailChange(itemIndex, capIndex, 'caps', 'neck_size', capItem.NECK_DIAM);
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
@@ -963,17 +951,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  {/* Neck Size */}
-                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
-                                    <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
-                                    <input
-                                      type="text"
-                                      value={cap.neck_size || ""}
-                                      className="w-full px-3 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
-                                      readOnly
-                                    />
-                                  </div>
-
                                   {/* Process */}
                                   <div className="col-span-6 sm:col-span-3 lg:col-span-2">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Process</label>
@@ -982,7 +959,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         value={cap.process || "N/A"}
                                         onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'process', e.target.value)}
                                         className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                       >
                                         <option value="N/A">Please Select</option>
                                         {capProcessOptions
@@ -1013,20 +990,20 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                       value={cap.quantity || ""}
                                       onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'quantity', e.target.value)}
                                       className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                       min="1"
                                     />
                                   </div>
 
                                   {/* Rate */}
-                                  <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                                  <div className="col-span-6 sm:col-span-3 lg:col-span-3">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
                                     <input
                                       type="number"
                                       value={cap.rate || ""}
                                       onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'rate', e.target.value)}
                                       className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                       min="0"
                                       step="0.01"
                                     />
@@ -1058,6 +1035,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                           </div>
                         </div>
 
+
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200">
                           <div className="flex items-center mb-4">
                             <h4 className="text-md font-medium text-orange-800">Team - Boxes</h4>
@@ -1070,62 +1048,30 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  {/* Box Name Input */}
+                                  {/* Box Name Input (Updated) */}
                                   <div className="col-span-12 md:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Box Name</label>
                                     <div className="relative">
                                       <input
                                         type="text"
-                                        value={boxSearches[`${itemIndex}-${boxIndex}`] || ""}
+                                        value={box.box_name === "N/A" ? "" : box.box_name}
+
                                         placeholder={box.box_name !== "N/A" ? box.box_name : "Please Select"}
-                                        onFocus={() => {
-                                          setIsDropdownVisible(`box-${itemIndex}-${boxIndex}`);
-                                          setFilteredBoxData(boxData.filter(b => b.box_name !== "N/A"));
-                                        }}
                                         onChange={(e) => {
-                                          const searchValue = e.target.value;
+                                          const inputValue = e.target.value;
                                           const newSearches = { ...boxSearches };
-                                          newSearches[`${itemIndex}-${boxIndex}`] = searchValue;
+                                          newSearches[`${itemIndex}-${boxIndex}`] = inputValue;
                                           setBoxSearches(newSearches);
 
-                                          const searchTerm = searchValue.toLowerCase();
-                                          const filtered = boxData.filter(b =>
-                                            (b.box_name !== "N/A" || searchTerm === "n/a") &&
-                                            b.box_name.toLowerCase().includes(searchTerm)
-                                          );
-                                          setFilteredBoxData(filtered);
+                                          handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'box_name', inputValue);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                  focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
+    focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400"
                                       />
+
                                       <svg className="h-5 w-5 absolute right-3 top-3 text-orange-500" fill="none" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                       </svg>
-                                      {isDropdownVisible === `box-${itemIndex}-${boxIndex}` && (
-                                        <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
-                                          {filteredBoxData.length > 0 ? (
-                                            filteredBoxData.map((boxItem, idx) => (
-                                              <div
-                                                key={idx}
-                                                className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
-                                                onClick={() => {
-                                                  const newSearches = { ...boxSearches };
-                                                  newSearches[`${itemIndex}-${boxIndex}`] = boxItem.box_name;
-                                                  setBoxSearches(newSearches);
-                                                  handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'box_name', boxItem.box_name);
-                                                  setIsDropdownVisible(null);
-                                                }}
-                                              >
-                                                <span className="text-orange-700 font-medium">
-                                                  {boxItem.box_name === "N/A" ? "Please Select" : boxItem.box_name}
-                                                </span>
-                                              </div>
-                                            ))
-                                          ) : (
-                                            <div className="px-4 py-3 text-gray-500 italic">No results found</div>
-                                          )}
-                                        </div>
-                                      )}
                                     </div>
                                   </div>
 
@@ -1200,6 +1146,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                           </div>
                         </div>
 
+
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200 rounded-b-xl">
                           <div className="flex items-center mb-4">
                             <h4 className="text-md font-medium text-orange-800">Team - Pumps</h4>
@@ -1222,7 +1169,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                         placeholder={pump.pump_name !== "N/A" ? pump.pump_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`pump-${itemIndex}-${pumpIndex}`);
-                                          // Use the correct property from your socket context data
                                           setFilteredPumpData(pumps.filter(p => p.name !== "N/A"));
                                         }}
                                         onChange={(e) => {
@@ -1232,7 +1178,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setPumpSearches(newSearches);
 
                                           const searchTerm = searchValue.toLowerCase();
-                                          // Filter using the correct property (name, not pump_name)
                                           const filtered = pumps.filter(p =>
                                             (p.name !== "N/A" || searchTerm === "n/a") &&
                                             p.name.toLowerCase().includes(searchTerm)
@@ -1240,7 +1185,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                           setFilteredPumpData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                  focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
                                       />
                                       <svg className="h-5 w-5 absolute right-3 top-3 text-orange-500" fill="none" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1253,15 +1198,10 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                                 key={idx}
                                                 className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
                                                 onClick={() => {
-                                                  // Set the search input to show the selected pump name
                                                   const newSearches = { ...pumpSearches };
                                                   newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.name;
                                                   setPumpSearches(newSearches);
-
-                                                  // Update the team assignment with the pump name
                                                   handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.name);
-
-                                                  // Close the dropdown
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
@@ -1278,28 +1218,9 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                     </div>
                                   </div>
 
-                                  {/* Neck, Quantity, Rate */}
                                   <div className="col-span-12 md:col-span-8">
                                     <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Neck Type</label>
-                                        <select
-                                          value={pump.neck_type || "N/A"}
-                                          onChange={(e) =>
-                                            handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'neck_type', e.target.value)
-                                          }
-                                          className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                        >
-                                          <option value="N/A">Please Select</option>
-                                          {pumpNeckTypeOptions.filter(name => name !== "N/A").map((name, idx) => (
-                                            <option key={idx} value={name}>
-                                              {name}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div className="col-span-6 md:col-span-4">
+                                      <div className="col-span-6 md:col-span-6">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                         <input
                                           type="number"
@@ -1308,11 +1229,11 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                             handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'quantity', e.target.value)
                                           }
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="1"
                                         />
                                       </div>
-                                      <div className="col-span-6 md:col-span-4">
+                                      <div className="col-span-6 md:col-span-6">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Rate</label>
                                         <input
                                           type="number"
@@ -1321,7 +1242,7 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                                             handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'rate', e.target.value)
                                           }
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="0"
                                         />
                                       </div>
@@ -1354,7 +1275,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
                             ))}
                           </div>
                         </div>
-
 
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200 rounded-b-xl">
                           <div className="flex items-center mb-4">

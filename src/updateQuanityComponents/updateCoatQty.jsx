@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
+import { DECORATION_SEQUENCES } from '../utils/sequence.jsx';
 
 const UpdateCoatQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
   const [assignments, setAssignments] = useState([]);
@@ -22,7 +23,7 @@ const UpdateCoatQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
 
 
   useEffect(() => {
-      console.log('data nai hai ')
+    console.log('data nai hai ')
     console.log("🟡 isOpen:", isOpen);
     console.log("🟡 itemData:", itemData);
 
@@ -126,148 +127,161 @@ const UpdateCoatQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
   };
 
   const handleSave = async () => {
-  try {
-    setLoading(true);
-    setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-    const updates = assignments
-      .filter(a => a.todayQty > 0)
-      .map(a => {
-        const currentCompleted = a.team_tracking?.total_completed_qty || 0;
-        const newCompleted = currentCompleted + a.todayQty;
-        const newEntry = {
-          date: new Date().toISOString(),
-          quantity: a.todayQty,
-          notes: a.notes || '',
-          operator: user.name || 'Current User'
-        };
+      const updates = assignments
+        .filter(assignment => assignment.todayQty > 0)
+        .map(assignment => {
+          const currentCompleted = assignment.team_tracking?.total_completed_qty || 0;
+          const newCompleted = currentCompleted + assignment.todayQty;
+          const newEntry = {
+            date: new Date().toISOString(),
+            quantity: assignment.todayQty,
+            notes: assignment.notes || '',
+            operator: user.name || 'Current User'
+          };
 
-        return {
-          assignmentId: a._id,
-          newEntry,
-          newTotalCompleted: newCompleted,
-          newStatus: newCompleted >= a.quantity ? 'Completed' : 'In Progress',
-          glass_item_id: a.glass_item_id,
-          coating_name: a.coating_name,
-          quantity: a.quantity
-        };
-      });
+          return {
+            assignmentId: assignment._id,
+            newEntry,
+            newTotalCompleted: newCompleted,
+            newStatus: newCompleted >= assignment.quantity ? 'Completed' : 'In Progress',
+            glass_item_id: assignment.glass_item_id,
+            coating_name: assignment.coating_name,
+            quantity: assignment.quantity
+          };
+        });
 
-    if (updates.length === 0) {
-      setError('Please enter quantity for at least one assignment');
-      setLoading(false);
-      return;
-    }
-
-    for (const assignment of assignments) {
-      const remaining = getRemainingQty(assignment);
-      if (assignment.todayQty > remaining) {
-        setError(`Quantity for ${assignment.coating_name} exceeds remaining amount (${remaining})`);
+      if (updates.length === 0) {
+        setError('Please enter quantity for at least one assignment');
         setLoading(false);
         return;
       }
-    }
 
-    const response = await axios.patch('http://localhost:5000/api/coat', {
-      orderNumber: orderData.order_number,
-      itemId: itemData._id,
-      updates
-    });
+      for (let i = 0; i < updates.length; i++) {
+        const assignment = assignments[i];
+        const remaining = getRemainingQty(assignment);
+        if (assignment.todayQty > remaining) {
+          setError(`Quantity for ${assignment.coating_name} exceeds remaining amount (${remaining})`);
+          setLoading(false);
+          return;
+        }
+      }
 
-    if (!response.data.success) throw new Error(response.data.message || 'Update failed');
-
-    const updatedOrder = response.data.data.order;
-    const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
-    const hasCompletedWork = completedUpdates.length > 0;
-    const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
-    const targetGlassItem = targetAssignment?.glass_item_id;
-
-    const filteredUpdatedOrder = {
-      ...updatedOrder,
-      item_ids: updatedOrder.item_ids.map(item => {
-        const glassAssignments = item.team_assignments?.glass || [];
-
-        const completedGlass = glassAssignments.filter(g =>
-          g.team_tracking?.total_completed_qty >= g.quantity
-        );
-
-        const validCoating = (item.team_assignments?.coating || [])
-          .filter(coating => {
-            const glassId = coating.glass_item_id?._id || coating.glass_item_id;
-
-            const isGlassDone = glassAssignments.some(g =>
-              g._id?.toString() === glassId?.toString() &&
-              g.team_tracking?.total_completed_qty >= g.quantity
-            );
-
-            const prevDone = isPreviousTeamsCompleted(item, 'coating', glassId);
-
-            return isGlassDone && prevDone;
-          })
-          .map(coating => preserveGlassItemDetails(coating, glassAssignments));
-
-        return {
-          ...item,
-          team_assignments: {
-            ...item.team_assignments,
-            glass: completedGlass,
-            coating: validCoating
-          }
-        };
-      }).filter(item => item.team_assignments?.coating?.length > 0)
-    };
-
-    updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.COATING);
-
-    if (notifyProgressUpdate && updates.length > 0 && targetGlassItem) {
-      const glassItemId = targetGlassItem?._id || targetGlassItem;
-      notifyProgressUpdate({
+      const response = await axios.patch('http://localhost:5000/api/coat', {
         orderNumber: orderData.order_number,
-        itemName: itemData.name,
-        team: user.team,
-        updateSource: 'coating_update',
-        targetGlassItem: glassItemId,
-        hasCompletedWork,
-        updates: updates.map(u => ({
-          assignmentId: u.assignmentId,
-          quantity: u.newEntry.quantity,
-          notes: u.newEntry.notes,
-          newTotalCompleted: u.newTotalCompleted,
-          newStatus: u.newStatus,
-          glass_item_id: u.glass_item_id,
-          coating_name: u.coating_name
-        })),
-        updatedOrder: filteredUpdatedOrder,
-        customerName: orderData.customer_name,
-        dispatcherName: orderData.dispatcher_name,
-        timestamp: new Date().toISOString()
+        itemId: itemData._id,
+        updates
       });
+
+      if (!response.data.success) throw new Error(response.data.message || 'Update failed');
+
+      const updatedOrder = response.data.data.order;
+
+      const completedUpdates = updates.filter(u => u.newStatus === 'Completed');
+      const hasCompletedWork = completedUpdates.length > 0;
+      const targetAssignment = hasCompletedWork ? completedUpdates[0] : updates[0];
+      const targetGlassItem = targetAssignment?.glass_item_id;
+
+      // ✅ FIXED: Apply proper filtering with sequence validation
+      const filteredUpdatedOrder = {
+        ...updatedOrder,
+        item_ids: updatedOrder.item_ids.map(item => {
+          const glassAssignments = item.team_assignments?.glass || [];
+
+          // Only include glass assignments that are completed
+          const completedGlass = glassAssignments.filter(g =>
+            g.team_tracking?.total_completed_qty >= g.quantity
+          );
+
+          // ✅ CRITICAL FIX: Apply sequence validation to coating assignments
+          const validCoating = (item.team_assignments?.coating || [])
+            .filter(coatingAssignment => {
+              const glassId = coatingAssignment.glass_item_id?._id || coatingAssignment.glass_item_id;
+
+              // Check if glass is completed
+              const isGlassDone = glassAssignments.some(g =>
+                g._id?.toString() === glassId?.toString() &&
+                g.team_tracking?.total_completed_qty >= g.quantity
+              );
+
+              if (!isGlassDone) return false;
+
+              // ✅ CRITICAL: Check if previous teams in sequence are completed
+              const prevDone = isPreviousTeamsCompleted(item, 'coating', glassId, DECORATION_SEQUENCES);
+
+              console.log('🔍 Coating sequence validation:', {
+                glassId: glassId?.toString(),
+                coatingName: coatingAssignment.coating_name,
+                isGlassDone,
+                prevDone,
+                shouldInclude: isGlassDone && prevDone
+              });
+
+              return prevDone;
+            })
+            .map(f => preserveGlassItemDetails(f, glassAssignments));
+
+          return {
+            ...item,
+            team_assignments: {
+              ...item.team_assignments,
+              glass: completedGlass,
+              coating: validCoating
+            }
+          };
+        }).filter(item => item.team_assignments?.coating?.length > 0)
+      };
+
+      console.log('🎯 Filtered order for coating local storage:', {
+        originalItems: updatedOrder.item_ids.length,
+        filteredItems: filteredUpdatedOrder.item_ids.length,
+        targetGlassItem: targetGlassItem?._id || targetGlassItem
+      });
+
+      updateTeamOrderLocal(filteredUpdatedOrder, TEAMS.COATING);
+
+      // ✅ Notify progress update even for partial completions
+      if (notifyProgressUpdate && updates.length > 0 && targetGlassItem) {
+        const glassItemId = targetGlassItem?._id || targetGlassItem;
+
+        notifyProgressUpdate({
+          orderNumber: orderData.order_number,
+          itemName: itemData.name,
+          team: user.team,
+          updateSource: 'coating_update',
+          targetGlassItem: glassItemId,
+          hasCompletedWork,
+          updates: updates.map(u => ({
+            assignmentId: u.assignmentId,
+            quantity: u.newEntry.quantity,
+            notes: u.newEntry.notes,
+            newTotalCompleted: u.newTotalCompleted,
+            newStatus: u.newStatus,
+            glass_item_id: u.glass_item_id,
+            coating_name: u.coating_name
+          })),
+          updatedOrder: filteredUpdatedOrder,
+          customerName: orderData.customer_name,
+          dispatcherName: orderData.dispatcher_name,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      setSuccessMessage('Coating quantities updated!');
+      setTimeout(() => {
+        onUpdate?.(filteredUpdatedOrder);
+        onClose();
+      }, 1500);
+    } catch (err) {
+      console.error('❌ Error in coating save:', err);
+      setError(err?.response?.data?.message || err.message || 'Failed to update coating');
+    } finally {
+      setLoading(false);
     }
-
-    console.log('✅ Coating update successful:', {
-      orderNumber: orderData.order_number,
-      team: user.team,
-      completedCount: completedUpdates.length,
-      targetGlassItem,
-      hasCompletedWork,
-      totalCoatingAssignments: filteredUpdatedOrder.item_ids.reduce(
-        (count, item) => count + (item.team_assignments?.coating?.length || 0),
-        0
-      )
-    });
-
-    setSuccessMessage('Coating quantities updated!');
-    setTimeout(() => {
-      onUpdate?.(filteredUpdatedOrder);
-      onClose();
-    }, 1500);
-  } catch (err) {
-    console.error('❌ Error updating coating:', err);
-    setError(err?.response?.data?.message || err.message || 'Failed to update coating');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   const ProgressBar = ({ assignment, todayQty }) => {

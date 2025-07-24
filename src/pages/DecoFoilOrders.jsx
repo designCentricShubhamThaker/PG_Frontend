@@ -74,7 +74,7 @@ const DecoFoilOrders = ({ orderType }) => {
     };
 
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
-       const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
+        const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
         return result;
     };
 
@@ -127,43 +127,55 @@ const DecoFoilOrders = ({ orderType }) => {
         const newOrder = orderData.orderData;
         const targetGlassItem = orderData.targetGlassItem;
 
+        console.log('🔍 New order received:', {
+            orderNumber: newOrder.order_number,
+            targetGlassItem,
+            hasTargetGlass: !!targetGlassItem,
+            currentTab: orderType
+        });
+
         if (!hasfoilingAssignments(newOrder)) {
-            console.log('❌ Order has no printing assignments, ignoring');
+            console.log('❌ Order has no foiling assignments, ignoring');
             return;
         }
 
+        // Update both caches first - this is crucial
         updateBothCaches(newOrder, targetGlassItem);
+
         const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
-        if (orderStatus !== currentViewType) {
-            console.log('⚠️ Order belongs to different tab, removing from current view if exists');
+        console.log('📊 Order status check:', {
+            orderStatus,
+            currentViewType,
+            shouldShowInCurrentTab: orderStatus === currentViewType
+        });
 
-            setOrders(prevOrders => {
-                const filtered = prevOrders.filter(order => order._id !== newOrder._id);
-                if (filtered.length !== prevOrders.length) {
-                    console.log('🗑️ Removed order from current view');
-                }
-                return filtered;
-            });
-            return;
-        }
-
+        // SINGLE setOrders call that handles all cases
         setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-            let updatedOrders;
+            // First, always remove any existing instance of this order
+            const filteredOrders = prevOrders.filter(order => order._id !== newOrder._id);
 
-            if (existingOrderIndex >= 0) {
-                const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Merged order in current view:', newOrder.order_number);
+            // Only add the order if it belongs to the current view
+            if (orderStatus === currentViewType) {
+                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+
+                if (existingOrderIndex >= 0) {
+                    // Merge with existing order
+                    const existingOrder = prevOrders[existingOrderIndex];
+                    const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
+                    console.log('✅ Merged order in current view:', newOrder.order_number);
+                    return [mergedOrder, ...filteredOrders];
+                } else {
+                    // Add new order
+                    console.log('✅ Added order to current view:', newOrder.order_number);
+                    return [newOrder, ...filteredOrders];
+                }
             } else {
-                updatedOrders = [newOrder, ...prevOrders];
-                console.log('✅ Added order to current view:', newOrder.order_number);
+                // Order doesn't belong to current view, just return filtered list
+                console.log('⚠️ Order belongs to different tab, removed from current view');
+                return filteredOrders;
             }
-            return updatedOrders;
         });
     }, [orderType, hasfoilingAssignments, isOrderCompleted]);
 
@@ -257,7 +269,7 @@ const DecoFoilOrders = ({ orderType }) => {
 
 
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
-    
+
         const existingItemsMap = {};
         const newItemsMap = {};
 

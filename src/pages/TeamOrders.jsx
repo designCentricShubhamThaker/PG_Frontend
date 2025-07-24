@@ -19,6 +19,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/useAuth.jsx';
 import CreateTeamOrderChild from '../child/CreateTeamOrderChild.jsx';
 import ViewTeamOrderChild from '../components/viewTeamOrderChild.jsx';
+import ViewOrderComponent from '../components/viewDispatcherOrders.jsx';
 
 const TeamOrders = ({ orderType }) => {
   const [createOrder, setCreateOrder] = useState(false);
@@ -877,7 +878,7 @@ const TeamOrders = ({ orderType }) => {
         />
       )}
       {showModal && (
-        <ViewTeamOrderChild
+        <ViewOrderComponent
           onClose={handleClose}
           order={selectedOrder}
         />
