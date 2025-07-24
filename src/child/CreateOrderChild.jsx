@@ -13,9 +13,11 @@ import { handleDuplicateOrder } from '../utils/orderHelpers.jsx';
 import { handleSubmitOrder } from '../utils/orderSubmit.jsx';
 import EnhancedPriceDisplay from '../components/EnhancedPriiceDisplay.jsx';
 
+
 const CreateOrderChild = ({ onClose, onCreateOrder }) => {
 
   const { notifyTeam, isConnected, getItemsByType, loadItems } = useSocket();
+
 
   const caps = getItemsByType('caps');
   const pumps = getItemsByType('pumps');
@@ -58,7 +60,6 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
     { key: 'frosting_printing_foiling', label: 'FROSTING + PRINTING + FOILING' }
   ];
   const capProcessOptions = ["Metal - Unassembly", "Non Metal - Unassembly", "Metal - Assembly", "Non Metal - Assembly"];
-
 
   const pumpNeckTypeOptions = ["Standard", "Wide", "Narrow", "Custom"];
   const [exchangeRates, setExchangeRates] = useState({
@@ -430,26 +431,26 @@ const CreateOrderChild = ({ onClose, onCreateOrder }) => {
   };
 
   const handleSubmit = (e) => handleSubmitOrder({
-  e,
-  orderNumber,
-  dispatcherName,
-  customerName,
-  orderItems,
-  setIsSubmitting,
-  setError,
-  addOrderToLocalStorage,
-  isConnected,
-  notifyTeam,
-  onCreateOrder,
-  resetForm: () =>
-    resetForm({
-      setOrderNumber,
-      setDispatcherName,
-      setCustomerName,
-      setOrderItems
-    }),
-  onClose
-});
+    e,
+    orderNumber,
+    dispatcherName,
+    customerName,
+    orderItems,
+    setIsSubmitting,
+    setError,
+    addOrderToLocalStorage,
+    isConnected,
+    notifyTeam,
+    onCreateOrder,
+    resetForm: () =>
+      resetForm({
+        setOrderNumber,
+        setDispatcherName,
+        setCustomerName,
+        setOrderItems
+      }),
+    onClose
+  });
 
 
   return (

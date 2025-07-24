@@ -74,23 +74,7 @@ const DecoFoilOrders = ({ orderType }) => {
     };
 
     const mergeItemAssignments = (existingItem, newItem, targetGlassItem = null) => {
-        console.log('🔧 Merging item assignments:', {
-            itemName: existingItem.name,
-            targetGlassItem,
-            existingGlassAssignments: existingItem.team_assignments?.glass?.length || 0,
-            newGlassAssignments: newItem.team_assignments?.glass?.length || 0,
-            existingFoilingAssignments: existingItem.team_assignments?.foiling?.length || 0,
-            newFoilingAssignments: newItem.team_assignments?.foiling?.length || 0,
-        });
-
-        const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
-
-        console.log('✅ Merge result:', {
-            itemName: result.name,
-            finalGlassAssignments: result.team_assignments?.glass?.length || 0,
-            finalFoilingAssignments: result.team_assignments?.foiling?.length || 0,
-        });
-
+       const result = mergeItemAssignmentsSafe(existingItem, newItem, 'foiling', targetGlassItem);
         return result;
     };
 
@@ -273,13 +257,7 @@ const DecoFoilOrders = ({ orderType }) => {
 
 
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
-        console.log('🔧 Merging orders:', {
-            existingOrderId: existingOrder._id,
-            newOrderId: newOrder._id,
-            targetGlassItem,
-            isFiltered: !!targetGlassItem
-        });
-
+    
         const existingItemsMap = {};
         const newItemsMap = {};
 
@@ -356,13 +334,6 @@ const DecoFoilOrders = ({ orderType }) => {
                 }
             });
         }
-
-        console.log('🎯 Merge result:', {
-            totalItems: mergedItems.length,
-            itemNames: mergedItems.map(item => item.name),
-            targetGlassItem
-        });
-
         return {
             ...existingOrder,
             ...newOrder,

@@ -98,11 +98,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    setUser(null);
-    navigate('/login');
-  };
+  localStorage.clear(); // This clears ALL localStorage data
+  setUser(null);
+  navigate('/login');
+};
+
 
   const value = {
     user,

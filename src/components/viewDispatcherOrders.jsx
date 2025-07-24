@@ -702,78 +702,87 @@ const ViewOrderComponent = ({ order, onClose }) => {
     };
 
     const renderCapAssignments = () => {
-      if (!item.team_assignments.caps || !Array.isArray(item.team_assignments.caps) || item.team_assignments.caps.length === 0) {
-        return null;
-      }
+  if (!item.team_assignments.caps || !Array.isArray(item.team_assignments.caps) || item.team_assignments.caps.length === 0) {
+    return null;
+  }
 
-      // ADD THIS RETURN STATEMENT
-      return item.team_assignments.caps.map((cap, idx) => {
-        // Determine which tracking to use based on process
-        const isAssembly = cap.process?.toLowerCase().includes('assembly');
-        const tracking = isAssembly ? cap.assembly_tracking : cap.metal_tracking;
+  return item.team_assignments.caps.map((cap, idx) => {
+    const hasAssembly = cap.process?.toLowerCase().includes('assembly');
 
-        const completedQty = tracking?.total_completed_qty || 0;
-        const completionPercentage = cap.quantity > 0
-          ? Math.round((completedQty / cap.quantity) * 100)
-          : 0;
+    const renderProcessBlock = (type) => {
+      const tracking = type === 'assembly' ? cap.assembly_tracking : cap.metal_tracking;
+      const completedQty = tracking?.total_completed_qty || 0;
+      const completionPercentage = cap.quantity > 0
+        ? Math.round((completedQty / cap.quantity) * 100)
+        : 0;
 
-        return (
-          <div
-            key={cap._id}
-            className={`${idx > 0 || renderGlassAssignments() ? 'mt-4 pt-4 border-t ' + itemBorderColor : ''}`}
-          >
-            <div className="flex flex-wrap justify-between items-center mb-3">
-              <div className="w-full md:w-auto flex items-center space-x-2 mb-2 md:mb-0">
-                <span className={`px-2 py-1 ${index % 2 === 0 ? 'bg-orange-100 text-orange-700' : 'bg-orange-100 text-orange-700'} rounded-md text-sm font-medium`}>
-                  Cap
-                </span>
-                <h4 className="font-medium text-gray-800">{cap.cap_name} ({cap.process})</h4>
-              </div>
-              <div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${cap.status === 'Completed'
-                  ? 'bg-green-100 text-green-800'
-                  : index % 2 === 0 ? 'bg-orange-100 text-orange-800' : 'bg-orange-100 text-orange-800'
-                  }`}>
-                  {cap.status}
-                </span>
-              </div>
+      return (
+        <div className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Quantity</p>
+              <p className="text-sm font-medium">{cap.quantity}</p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Quantity</p>
-                <p className="text-sm font-medium">{cap.quantity}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Process</p>
-                <p className="text-sm font-medium">{cap.process}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Neck Size</p>
-                <p className="text-sm font-medium">{cap.neck_size}</p>
-              </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Process</p>
+              <p className="text-sm font-medium">{type === 'assembly' ? 'Assembly' : 'Metal'}</p>
             </div>
-
-            <div className="mt-2">
-              <p className="text-sm text-gray-500 mb-1">Completion</p>
-              <div className="flex items-center space-x-3">
-                <div className="flex-1 p-[1px] rounded-full bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#cc5500]">
-                  <div className="bg-white rounded-full h-4 flex items-center overflow-hidden">
-                    <div
-                      className={`h-3 rounded-full transition-all duration-300 ${index % 2 === 0 ? 'bg-[#FF6900]' : 'bg-orange-600'}`}
-                      style={{ width: `${completionPercentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-red-800 whitespace-nowrap">
-                  {completedQty}/{cap.quantity}
-                </span>
-              </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Neck Size</p>
+              <p className="text-sm font-medium">{cap.neck_size}</p>
             </div>
           </div>
-        );
-      });
+
+          <div className="mt-2">
+            <p className="text-sm text-gray-500 mb-1">Completion ({type === 'assembly' ? 'Assembly' : 'Metal'})</p>
+            <div className="flex items-center space-x-3">
+              <div className="flex-1 p-[1px] rounded-full bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#cc5500]">
+                <div className="bg-white rounded-full h-4 flex items-center overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-300 ${index % 2 === 0 ? 'bg-[#FF6900]' : 'bg-orange-600'}`}
+                    style={{ width: `${completionPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
+              <span className="text-sm font-semibold text-red-800 whitespace-nowrap">
+                {completedQty}/{cap.quantity}
+              </span>
+            </div>
+          </div>
+        </div>
+      );
     };
+
+    return (
+      <div
+        key={cap._id}
+        className={`${idx > 0 || renderGlassAssignments() ? 'mt-4 pt-4 border-t ' + itemBorderColor : ''}`}
+      >
+        <div className="flex flex-wrap justify-between items-center mb-3">
+          <div className="w-full md:w-auto flex items-center space-x-2 mb-2 md:mb-0">
+            <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-md text-sm font-medium">
+              Cap
+            </span>
+            <h4 className="font-medium text-gray-800">{cap.cap_name} ({cap.process})</h4>
+          </div>
+          <div>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${cap.status === 'Completed'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-orange-100 text-orange-800'
+              }`}>
+              {cap.status}
+            </span>
+          </div>
+        </div>
+
+        {/* Render metal and/or assembly blocks */}
+        {renderProcessBlock('metal')}
+        {hasAssembly && renderProcessBlock('assembly')}
+      </div>
+    );
+  });
+};
+
 
     const renderBoxAssignments = () => {
       if (!item.team_assignments.boxes || !Array.isArray(item.team_assignments.boxes) || item.team_assignments.boxes.length === 0) {
