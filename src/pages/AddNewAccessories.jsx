@@ -119,7 +119,7 @@ const AddNewAccessories = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-sm">Loading pumps...</div>
+        <div className="text-sm">Loading accessories...</div>
       </div>
     );
   }
@@ -135,7 +135,7 @@ const AddNewAccessories = () => {
           className="cursor-pointer bg-orange-700 text-white flex items-center gap-2 px-3 py-1.5 rounded-sm shadow-md transition-colors duration-200 font-medium hover:bg-red-900 hover:text-white"
         >
           <Plus size={16} />
-          New Pump
+          New Accessories
         </button>
 
         <div className="relative">
@@ -161,7 +161,7 @@ const AddNewAccessories = () => {
           <table className="w-full min-w-full rounded-full">
             <thead className="bg-gradient-to-r from-[#993300] via-[#FF6600] to-[#FFB84D] text-center font-bold text-sm text-white sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-3 text-left text-sm font-medium">Pump Name</th>
+                <th className="px-2 py-3 text-left text-sm font-medium">Accessory Name</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Edit</th>
                 <th className="px-2 py-3 text-center text-sm font-medium">Delete</th>
               </tr>

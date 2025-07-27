@@ -6,6 +6,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredItems, setFilteredItems] = useState([]);
+  console.log(order);
 
   useEffect(() => {
     if (order?.item_ids && Array.isArray(order.item_ids)) {
@@ -223,7 +224,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
     </div>
   );
 
-    const renderItemCard = (item, index) => {
+  const renderItemCard = (item, index) => {
     if (!item.team_assignments) return null;
 
     const itemBgColor = index % 2 === 0 ? "bg-orange-50" : "bg-orange-50";
@@ -390,10 +391,12 @@ const ViewOrderComponent = ({ order, onClose }) => {
         );
       });
     };
+    
     const renderFoilingAssignments = () => {
       if (!item.team_assignments.foiling || !Array.isArray(item.team_assignments.foiling) || item.team_assignments.foiling.length === 0) {
         return null;
       }
+      console.log(item.team_assignments.foiling);
 
       return item.team_assignments.foiling.map((glass, idx) => {
         const completedQty = glass.team_tracking?.total_completed_qty || 0;
@@ -416,6 +419,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
                   Foiling
                 </span>
                 <h4 className="font-medium text-gray-800">{glass.glass_item_id.glass_name}</h4>
+             
               </div>
               <div>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${glass.status === 'Completed'
@@ -474,6 +478,7 @@ const ViewOrderComponent = ({ order, onClose }) => {
         );
       });
     };
+
     const renderCoatingAssignments = () => {
       if (!item.team_assignments.coating || !Array.isArray(item.team_assignments.coating) || item.team_assignments.coating.length === 0) {
         return null;

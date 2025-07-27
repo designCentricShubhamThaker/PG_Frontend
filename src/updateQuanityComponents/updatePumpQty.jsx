@@ -267,10 +267,10 @@ const UpdatePumpQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                         <div className="bg-gradient-to-r from-orange-800 via-orange-600 to-orange-400 px-4 py-3 mt-6 rounded-md">
                             <div className="grid gap-4 text-white font-semibold text-sm items-center"
                                 style={{
-                                    gridTemplateColumns: '2fr 1fr 1fr 1fr 4fr 2fr '
+                                    gridTemplateColumns: '2fr  1fr 1fr 4fr 2fr '
                                 }}>
                                 <div className="text-left">Pump Name</div>
-                                <div className="text-left">Neck Type</div>
+                               
                                 <div className="text-center">Total Qty</div>
                                 <div className="text-center">Remaining</div>
                                 <div className="text-center">Progress</div>
@@ -291,21 +291,14 @@ const UpdatePumpQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                                         className={`border-b border-orange-100 px-6 py-4 ${bgColor} -mx-6 mb-4 last:mb-0`}>
                                         <div className="grid gap-4 text-sm items-center"
                                             style={{
-                                               gridTemplateColumns: '2fr 1fr 1fr 1fr 4fr 2fr '
+                                               gridTemplateColumns: '2fr 1fr  1fr 4fr 2fr '
                                             }}>
 
                                             <div className="text-left">
                                                 <div className="font-medium text-orange-900">{assignment.pump_name}</div>
-                                                <div className="text-xs text-gray-600">
-                                                    {assignment.decoration} #{assignment.decoration_no}
-                                                </div>
+                                                
                                             </div>
-                                            <div className="text-left">
-                                                <div className="font-medium text-orange-900">{assignment.neck_type}</div>
-                                            </div>
-
-                                            
-
+                                           
                                             <div className="text-center text-orange-900 font-medium">
                                                 {assignment.quantity}
                                             </div>

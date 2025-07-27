@@ -132,16 +132,16 @@ const UpdateBoxQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 }
             }
 
-            const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/boxes', {
-                orderNumber: orderData.order_number,
-                itemId: itemData._id,
-                updates
-            });
-            // const response = await axios.patch('http://localhost:5000/api/boxes', {
+            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/boxes', {
             //     orderNumber: orderData.order_number,
             //     itemId: itemData._id,
             //     updates
             // });
+            const response = await axios.patch('http://localhost:5000/api/boxes', {
+                orderNumber: orderData.order_number,
+                itemId: itemData._id,
+                updates
+            });
 
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;

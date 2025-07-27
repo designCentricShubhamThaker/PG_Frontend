@@ -3,10 +3,7 @@ import { Plus, Minus, Trash } from 'lucide-react';
 import axios from 'axios';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { GoTrash } from "react-icons/go";
-import { CapData } from '../data/CapData.js';
-import { glassData } from '../data/GlassData.js';
-import { boxData } from "../data/boxData.js"
-import { pumpData } from "../data/pumpData.js"
+
 import { updateDispatcherOrderInLocalStorage } from '../utils/localStorageUtils.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { toast } from 'react-hot-toast';
@@ -14,23 +11,43 @@ import { useAuth } from '../context/useAuth.jsx';
 
 
 const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
+  const { notifyOrderEdit, isConnected, getItemsByType, loadItems } = useSocket()
+  const caps = getItemsByType('caps');
+  const pumps = getItemsByType('pumps');
+  const glass = getItemsByType('glass');
+  const accessories = getItemsByType('accessories');
+  const { user } = useAuth()
   const [orderNumber, setOrderNumber] = useState("");
   const [dispatcherName, setDispatcherName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [error, setError] = useState("");
   const dispatchers = ["Rajesh Kumar", "Anita Sharma"];
 
-  const [filteredGlassData, setFilteredGlassData] = useState(glassData);
-  const [filteredCapData, setFilteredCapData] = useState(CapData);
-  const [filteredBoxData, setFilteredBoxData] = useState(boxData);
-  const [filteredPumpData, setFilteredPumpData] = useState(pumpData);
-
+  const [filteredGlassData, setFilteredGlassData] = useState(glass);
+  const [filteredCapData, setFilteredCapData] = useState(caps);
+  const [filteredPumpData, setFilteredPumpData] = useState(pumps);
+  const [filteredAccessoryData, setFilteredAccessoryData] = useState(accessories);
   const [glassSearches, setGlassSearches] = useState({});
   const [capSearches, setCapSearches] = useState({});
   const [boxSearches, setBoxSearches] = useState({});
   const [pumpSearches, setPumpSearches] = useState({});
+  const [accessoriesSearches, setAccessoriesSearches] = useState({});
+
 
   const [isDropdownVisible, setIsDropdownVisible] = useState(null);
+
+  const DECORATION_COMBINATIONS = [
+    { key: 'coating', label: 'COATING' },
+    { key: 'coating_printing', label: 'COATING + PRINTING' },
+    { key: 'coating_printing_foiling', label: 'COATING + PRINTING + FOILING' },
+    { key: 'printing', label: 'PRINTING' },
+    { key: 'printing_foiling', label: 'PRINTING + FOILING' },
+    { key: 'foiling', label: 'FOILING' },
+    { key: 'coating_foiling', label: 'COATING + FOILING' },
+    { key: 'frosting', label: 'FROSTING' },
+    { key: 'frosting_printing', label: 'FROSTING + PRINTING' },
+    { key: 'frosting_printing_foiling', label: 'FROSTING + PRINTING + FOILING' }
+  ];
 
   const customers = [
     "Amit Verma",
@@ -43,17 +60,19 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
     "Deepa Joshi"
   ];
 
-  const decorationOptions = ["Printing", "Coating", "Frosting", "None"];
-  const capProcessOptions = ["Spraying", "Assembly", "Polishing", "None"];
-  const capMaterialOptions = ["Plastic", "Metal", "Wood", "Ceramic"];
-  const pumpNeckTypeOptions = ["Standard", "Wide", "Narrow", "Custom"];
+  useEffect(() => {
+    if (pumps.length === 0) loadItems('pumps');
+    if (caps.length === 0) loadItems('caps');
+    if (glass.length === 0) loadItems('glass');
+    if (accessories.length === 0) loadItems('accessories');
+  }, []);
+
+  const capProcessOptions = ["Metal - Unassembly", "Non Metal - Unassembly", "Metal - Assembly", "Non Metal - Assembly"];
+
 
   const [orderItems, setOrderItems] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   console.log(order);
-
-  const { notifyOrderEdit } = useSocket()
-  const { user } = useAuth()
 
 
   const createDefaultTeamAssignment = (team) => {
@@ -100,10 +119,21 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         }
       },
       pumps: {
-        pump_name: "N/A",
+        pump_name: "N/A", // changed from pump_name
         neck_type: "N/A",
         quantity: "",
         team: "Pump Manufacturing - Chennai",
+        status: "Pending",
+        team_tracking: {
+          total_completed_qty: 0,
+          completed_entries: [],
+          status: "Pending"
+        }
+      },
+      accessories: {
+        accessories_name: "N/A", // changed from accessories_name
+        quantity: "",
+        team: "Accessories Team - Default",
         status: "Pending",
         team_tracking: {
           total_completed_qty: 0,
@@ -115,6 +145,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
     return defaults[team];
   };
 
+
   useEffect(() => {
     if (order) {
       setOrderNumber(order.order_number || "");
@@ -122,7 +153,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
       setCustomerName(order.customer_name || "");
 
       const transformedItems = [];
-
       const itemsToProcess = order.item_ids || [];
 
       if (Array.isArray(itemsToProcess) && itemsToProcess.length > 0) {
@@ -133,13 +163,14 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               glass: [],
               caps: [],
               boxes: [],
-              pumps: []
+              pumps: [],
+              accessories: []
             }
           };
 
           if (item.team_assignments) {
-            // Handle Glass assignments
-            if (item.team_assignments.glass && Array.isArray(item.team_assignments.glass) && item.team_assignments.glass.length > 0) {
+            // Glass
+            if (Array.isArray(item.team_assignments.glass) && item.team_assignments.glass.length > 0) {
               transformedItem.teamAssignments.glass = item.team_assignments.glass.map(glass => ({
                 glass_name: glass.glass_name || "N/A",
                 quantity: glass.quantity?.toString() || "",
@@ -159,7 +190,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.glass = [createDefaultTeamAssignment('glass')];
             }
 
-            if (item.team_assignments.caps && Array.isArray(item.team_assignments.caps) && item.team_assignments.caps.length > 0) {
+            // Caps
+            if (Array.isArray(item.team_assignments.caps) && item.team_assignments.caps.length > 0) {
               transformedItem.teamAssignments.caps = item.team_assignments.caps.map(cap => ({
                 cap_name: cap.cap_name || "N/A",
                 neck_size: cap.neck_size || "",
@@ -178,7 +210,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.caps = [createDefaultTeamAssignment('caps')];
             }
 
-            if (item.team_assignments.boxes && Array.isArray(item.team_assignments.boxes) && item.team_assignments.boxes.length > 0) {
+            // Boxes
+            if (Array.isArray(item.team_assignments.boxes) && item.team_assignments.boxes.length > 0) {
               transformedItem.teamAssignments.boxes = item.team_assignments.boxes.map(box => ({
                 box_name: box.box_name || "N/A",
                 quantity: box.quantity?.toString() || "",
@@ -195,7 +228,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               transformedItem.teamAssignments.boxes = [createDefaultTeamAssignment('boxes')];
             }
 
-            if (item.team_assignments.pumps && Array.isArray(item.team_assignments.pumps) && item.team_assignments.pumps.length > 0) {
+            // ✅ Pumps (use `name` instead of `pump_name`)
+            if (Array.isArray(item.team_assignments.pumps) && item.team_assignments.pumps.length > 0) {
               transformedItem.teamAssignments.pumps = item.team_assignments.pumps.map(pump => ({
                 pump_name: pump.pump_name || "N/A",
                 neck_type: pump.neck_type || "N/A",
@@ -211,19 +245,36 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
             } else {
               transformedItem.teamAssignments.pumps = [createDefaultTeamAssignment('pumps')];
             }
+
+            // ✅ Accessories (use `name` instead of `accessories_name`)
+            if (Array.isArray(item.team_assignments.accessories) && item.team_assignments.accessories.length > 0) {
+              transformedItem.teamAssignments.accessories = item.team_assignments.accessories.map(acc => ({
+                accessories_name: acc.accessories_name || "N/A",
+                quantity: acc.quantity?.toString() || "",
+                team: acc.team || "Accessories Team - Default",
+                status: acc.status || "Pending",
+                team_tracking: acc.team_tracking || {
+                  total_completed_qty: 0,
+                  completed_entries: [],
+                  status: "Pending"
+                }
+              }));
+            } else {
+              transformedItem.teamAssignments.accessories = [createDefaultTeamAssignment('accessories')];
+            }
           }
 
           transformedItems.push(transformedItem);
         });
       } else {
-
         transformedItems.push({
           name: "Item 1",
           teamAssignments: {
             glass: [createDefaultTeamAssignment('glass')],
             caps: [createDefaultTeamAssignment('caps')],
             boxes: [createDefaultTeamAssignment('boxes')],
-            pumps: [createDefaultTeamAssignment('pumps')]
+            pumps: [createDefaultTeamAssignment('pumps')],
+            accessories: [createDefaultTeamAssignment('accessories')]
           }
         });
       }
@@ -234,6 +285,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
       const initialCapSearches = {};
       const initialBoxSearches = {};
       const initialPumpSearches = {};
+      const initialAccessoriesSearches = {};
 
       transformedItems.forEach((item, itemIndex) => {
         item.teamAssignments.glass.forEach((glass, glassIndex) => {
@@ -251,9 +303,16 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
             initialBoxSearches[`${itemIndex}-${boxIndex}`] = box.box_name;
           }
         });
+        // ✅ Update pump search to use name
         item.teamAssignments.pumps.forEach((pump, pumpIndex) => {
           if (pump.pump_name && pump.pump_name !== "N/A") {
-            initialPumpSearches[`${itemIndex}-${pumpIndex}`] = pump.pump_name;
+            initialPumpSearches[`${itemIndex}-${pumpIndex}`] = pump.name;
+          }
+        });
+        // ✅ Update accessories search to use name
+        item.teamAssignments.accessories?.forEach((acc, accIndex) => {
+          if (acc.accessories_name && acc.accessories_name !== "N/A") {
+            initialAccessoriesSearches[`${itemIndex}-${accIndex}`] = acc.accessories_name;
           }
         });
       });
@@ -262,8 +321,11 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
       setCapSearches(initialCapSearches);
       setBoxSearches(initialBoxSearches);
       setPumpSearches(initialPumpSearches);
+      setAccessoriesSearches(initialAccessoriesSearches);
     }
   }, [order]);
+
+
 
   const addOrderItem = () => {
     const newItemNumber = orderItems.length + 1;
@@ -275,7 +337,9 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
           glass: [createDefaultTeamAssignment('glass')],
           caps: [createDefaultTeamAssignment('caps')],
           boxes: [createDefaultTeamAssignment('boxes')],
-          pumps: [createDefaultTeamAssignment('pumps')]
+          pumps: [createDefaultTeamAssignment('pumps')],
+          accessories: [createDefaultTeamAssignment('accessories')],
+
         }
       }
     ]);
@@ -343,8 +407,16 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         const validPumpItems = item.teamAssignments.pumps.filter(pump =>
           pump.pump_name !== "N/A" && pump.pump_name !== "" && pump.quantity);
 
-        if (validGlassItems.length > 0 || validCapItems.length > 0 ||
-          validBoxItems.length > 0 || validPumpItems.length > 0) {
+        const validAccessoriesItems = item.teamAssignments.accessories?.filter(acc =>
+          acc.accessories_name !== "N/A" && acc.accessories_name !== "" && acc.quantity) || [];
+
+        if (
+          validGlassItems.length > 0 ||
+          validCapItems.length > 0 ||
+          validBoxItems.length > 0 ||
+          validPumpItems.length > 0 ||
+          validAccessoriesItems.length > 0
+        ) {
           hasValidItems = true;
 
           formattedItems.push({
@@ -395,7 +467,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
               }
             })),
             pumps: validPumpItems.map(pump => ({
-              pump_name: pump.pump_name,
+              pump_name: pump.pump_name, // changed from pump_name
               neck_type: pump.neck_type || '',
               quantity: parseInt(pump.quantity, 10) || 0,
               team: pump.team || 'Pump Manufacturing - Chennai',
@@ -405,7 +477,19 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                 completed_entries: [],
                 status: 'Pending'
               }
+            })),
+            accessories: validAccessoriesItems.map(acc => ({
+              accessories_name: acc.accessories_name, // changed from accessories_name
+              quantity: parseInt(acc.quantity, 10) || 0,
+              team: acc.team || 'Accessories Team - Default',
+              status: acc.status || 'Pending',
+              team_tracking: acc.team_tracking || {
+                total_completed_qty: 0,
+                completed_entries: [],
+                status: 'Pending'
+              }
             }))
+
           });
         }
       }
@@ -416,7 +500,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         return;
       }
 
-      // Store the original order for comparison
       const previousOrder = { ...order };
 
       const orderData = {
@@ -427,25 +510,21 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
         items: formattedItems
       };
 
-      // const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/orders/${order._id}`, orderData);
       const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
 
       if (response.data.success) {
         const updatedOrder = response.data.data;
-
-        const updateSuccess = updateDispatcherOrderInLocalStorage(updatedOrder ,user.team);
+        const updateSuccess = updateDispatcherOrderInLocalStorage(updatedOrder, user.team);
 
         if (!updateSuccess) {
           console.warn('Order updated in database but localStorage update failed');
         }
 
-        // Determine what fields were edited
         const editedFields = [];
         if (previousOrder.order_number !== updatedOrder.order_number) editedFields.push('order_number');
         if (previousOrder.dispatcher_name !== updatedOrder.dispatcher_name) editedFields.push('dispatcher_name');
         if (previousOrder.customer_name !== updatedOrder.customer_name) editedFields.push('customer_name');
         if (JSON.stringify(previousOrder.items) !== JSON.stringify(updatedOrder.items)) editedFields.push('items');
-
 
         if (notifyOrderEdit) {
           const editData = {
@@ -453,24 +532,13 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
             previousOrder,
             editedFields
           };
-
           const notificationSent = notifyOrderEdit(editData);
-          if (!notificationSent) {
-            console.warn('Failed to send socket notification to teams');
-          }
-        } else {
-          console.warn('notifyOrderEdit function not available');
+          if (!notificationSent) console.warn('Failed to send socket notification to teams');
         }
 
-        if (onUpdateOrder) {
-          onUpdateOrder();
-        }
-
+        if (onUpdateOrder) onUpdateOrder();
         onClose();
-
-        console.log('Order updated successfully and teams notified');
-        toast.success("order details updated successfully !")
-
+        toast.success("Order details updated successfully!");
       } else {
         setError('Error updating order: ' + (response.data.message || 'Unknown error'));
         setIsSubmitting(false);
@@ -481,6 +549,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <Dialog open={true} onClose={onClose} className="relative z-10">
@@ -709,17 +778,16 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                             value={glass.decoration || "N/A"}
                                             onChange={(e) => handleTeamDetailChange(itemIndex, glassIndex, 'glass', 'decoration', e.target.value)}
                                             className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+         focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                           >
                                             <option value="N/A">Please Select</option>
-                                            {decorationOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
+                                            {DECORATION_COMBINATIONS.map((option, idx) => (
+                                              <option key={idx} value={option.key}>
+                                                {option.label}
+                                              </option>
+                                            ))}
                                           </select>
+
                                           <svg
                                             xmlns="http://www.w3.org/2000/svg"
                                             className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
@@ -796,7 +864,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  <div className="col-span-12 md:col-span-4">
+                                  {/* Cap Name - Wider */}
+                                  <div className="col-span-12 md:col-span-6">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Cap Name</label>
                                     <div className="relative">
                                       <input
@@ -805,9 +874,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                         placeholder={cap.cap_name !== "N/A" ? cap.cap_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`cap-${itemIndex}-${capIndex}`);
-                                          setFilteredCapData(
-                                            CapData.filter(c => c.FORMULA !== "N/A")
-                                          );
+                                          setFilteredCapData(CapData.filter(c => c.FORMULA !== "N/A"));
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -823,8 +890,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                           setFilteredCapData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                                                            placeholder:text-gray-400 z-50"
+                  focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                  placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -849,7 +916,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                                   setCapSearches(newSearches);
 
                                                   handleTeamDetailChange(itemIndex, capIndex, 'caps', 'cap_name', capItem.FORMULA);
-                                                  handleTeamDetailChange(itemIndex, capIndex, 'caps', 'neck_size', capItem.NECK_DIAM); // Fixed to use NECK_DIAM
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
@@ -866,35 +932,24 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                     </div>
                                   </div>
 
-                                  <div className="col-span-12 md:col-span-8">
+                                  {/* Other Fields - Process & Quantity */}
+                                  <div className="col-span-12 md:col-span-6">
                                     <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-3">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Neck Size</label>
-                                        <input
-                                          type="text"
-                                          value={cap.neck_size || ""}
-                                          className="w-full px-4 py-3 border bg-gray-50 border-orange-200 rounded-md text-sm text-orange-800 font-medium"
-                                          readOnly
-                                        />
-                                      </div>
-
-                                      <div className="col-span-6 md:col-span-3">
+                                      <div className="col-span-6 md:col-span-6">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Process</label>
                                         <div className="relative">
                                           <select
                                             value={cap.process || "N/A"}
                                             onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'process', e.target.value)}
                                             className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+                      focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
                                           >
                                             <option value="N/A">Please Select</option>
-                                            {capProcessOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
+                                            {capProcessOptions.filter(name => name !== "N/A").map((name, idx) => (
+                                              <option key={idx} value={name}>
+                                                {name}
+                                              </option>
+                                            ))}
                                           </select>
                                           <svg
                                             xmlns="http://www.w3.org/2000/svg"
@@ -908,44 +963,14 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                         </div>
                                       </div>
 
-                                      <div className="col-span-6 md:col-span-3">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Material</label>
-                                        <div className="relative">
-                                          <select
-                                            value={cap.material || "N/A"}
-                                            onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'material', e.target.value)}
-                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                          >
-                                            <option value="N/A">Please Select</option>
-                                            {capMaterialOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
-                                          </select>
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                          >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                          </svg>
-                                        </div>
-                                      </div>
-
-                                      <div className="col-span-6 md:col-span-3">
+                                      <div className="col-span-6 md:col-span-6">
                                         <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
                                         <input
                                           type="number"
                                           value={cap.quantity || ""}
                                           onChange={(e) => handleTeamDetailChange(itemIndex, capIndex, 'caps', 'quantity', e.target.value)}
                                           className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                           min="1"
                                         />
                                       </div>
@@ -978,6 +1003,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                           </div>
                         </div>
 
+
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200">
                           <div className="flex items-center mb-4">
                             <h4 className="text-md font-medium text-orange-800">Team - Boxes</h4>
@@ -990,6 +1016,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
+                                  {/* Box Name */}
                                   <div className="col-span-12 md:col-span-4">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Box Name</label>
                                     <div className="relative">
@@ -999,9 +1026,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                         placeholder={box.box_name !== "N/A" ? box.box_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`box-${itemIndex}-${boxIndex}`);
-                                          setFilteredBoxData(
-                                            boxData.filter(b => b.box_name !== "N/A")
-                                          );
+                                          setFilteredBoxData(boxData.filter(b => b.box_name !== "N/A"));
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -1017,8 +1042,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                           setFilteredBoxData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                                                            placeholder:text-gray-400 z-50"
+                  focus:ring-2 focus:ring-orange-500 focus:border-transparent placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -1041,7 +1065,6 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                                   const newSearches = { ...boxSearches };
                                                   newSearches[`${itemIndex}-${boxIndex}`] = boxItem.box_name;
                                                   setBoxSearches(newSearches);
-
                                                   handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'box_name', boxItem.box_name);
                                                   setIsDropdownVisible(null);
                                                 }}
@@ -1059,34 +1082,33 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                     </div>
                                   </div>
 
-                                  <div className="col-span-12 md:col-span-8">
-                                    <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Approval Code</label>
-                                        <input
-                                          type="text"
-                                          value={box.approval_code || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'approval_code', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                        />
-                                      </div>
+                                  {/* Approval Code */}
+                                  <div className="col-span-12 md:col-span-4">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Approval Code</label>
+                                    <input
+                                      type="text"
+                                      value={box.approval_code || ""}
+                                      onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'approval_code', e.target.value)}
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                    />
+                                  </div>
 
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
-                                        <input
-                                          type="number"
-                                          value={box.quantity || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'quantity', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="1"
-                                        />
-                                      </div>
-                                    </div>
+                                  {/* Quantity */}
+                                  <div className="col-span-12 md:col-span-4">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                    <input
+                                      type="number"
+                                      value={box.quantity || ""}
+                                      onChange={(e) => handleTeamDetailChange(itemIndex, boxIndex, 'boxes', 'quantity', e.target.value)}
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      min="1"
+                                    />
                                   </div>
                                 </div>
 
+                                {/* Add / Remove Buttons */}
                                 <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
                                   <button
                                     type="button"
@@ -1112,6 +1134,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                           </div>
                         </div>
 
+
                         <div className="p-6 bg-[#FFF8F3] border-t border-orange-200 rounded-b-xl">
                           <div className="flex items-center mb-4">
                             <h4 className="text-md font-medium text-orange-800">Team - Pumps</h4>
@@ -1124,7 +1147,8 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                 className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
                               >
                                 <div className="grid grid-cols-12 gap-4">
-                                  <div className="col-span-12 md:col-span-4">
+                                  {/* Pump Name */}
+                                  <div className="col-span-12 md:col-span-6">
                                     <label className="block text-sm font-medium text-orange-800 mb-2">Pump Name</label>
                                     <div className="relative">
                                       <input
@@ -1133,9 +1157,7 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                         placeholder={pump.pump_name !== "N/A" ? pump.pump_name : "Please Select"}
                                         onFocus={() => {
                                           setIsDropdownVisible(`pump-${itemIndex}-${pumpIndex}`);
-                                          setFilteredPumpData(
-                                            pumpData.filter(p => p.pump_name !== "N/A")
-                                          );
+                                          setFilteredPumpData(pumps.filter(p => p.name !== "N/A"));
                                         }}
                                         onChange={(e) => {
                                           const searchValue = e.target.value;
@@ -1144,15 +1166,15 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                           setPumpSearches(newSearches);
 
                                           const searchTerm = searchValue.toLowerCase();
-                                          const filtered = pumpData.filter(p =>
-                                            (p.pump_name !== "N/A" || searchTerm === "n/a") &&
-                                            p.pump_name.toLowerCase().includes(searchTerm)
+                                          const filtered = pumps.filter(p =>
+                                            (p.name !== "N/A" || searchTerm === "n/a") &&
+                                            p.name.toLowerCase().includes(searchTerm)
                                           );
                                           setFilteredPumpData(filtered);
                                         }}
                                         className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                            focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
-                                                            placeholder:text-gray-400 z-50"
+                  focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                  placeholder:text-gray-400 z-50"
                                       />
                                       <svg
                                         xmlns="http://www.w3.org/2000/svg"
@@ -1173,15 +1195,15 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                                 className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
                                                 onClick={() => {
                                                   const newSearches = { ...pumpSearches };
-                                                  newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.pump_name;
+                                                  newSearches[`${itemIndex}-${pumpIndex}`] = pumpItem.name;
                                                   setPumpSearches(newSearches);
 
-                                                  handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.pump_name);
+                                                  handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'pump_name', pumpItem.name);
                                                   setIsDropdownVisible(null);
                                                 }}
                                               >
                                                 <span className="text-orange-700 font-medium">
-                                                  {pumpItem.pump_name === "N/A" ? "Please Select" : pumpItem.pump_name}
+                                                  {pumpItem.pump_name === "N/A" ? "Please Select" : pumpItem.name}
                                                 </span>
                                               </div>
                                             ))
@@ -1193,53 +1215,21 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                                     </div>
                                   </div>
 
-                                  <div className="col-span-12 md:col-span-8">
-                                    <div className="grid grid-cols-12 gap-4">
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Neck Type</label>
-                                        <div className="relative">
-                                          <select
-                                            value={pump.neck_type || "N/A"}
-                                            onChange={(e) => handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'neck_type', e.target.value)}
-                                            className="w-full appearance-none px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                                focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-                                          >
-                                            <option value="N/A">Please Select</option>
-                                            {pumpNeckTypeOptions
-                                              .filter(name => name !== "N/A")
-                                              .map((name, idx) => (
-                                                <option key={idx} value={name}>
-                                                  {name}
-                                                </option>
-                                              ))}
-                                          </select>
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            className="h-5 w-5 absolute right-3 top-3 text-orange-500 pointer-events-none"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                          >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                          </svg>
-                                        </div>
-                                      </div>
-
-                                      <div className="col-span-6 md:col-span-4">
-                                        <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
-                                        <input
-                                          type="number"
-                                          value={pump.quantity || ""}
-                                          onChange={(e) => handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'quantity', e.target.value)}
-                                          className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
-                                                              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                                          min="1"
-                                        />
-                                      </div>
-                                    </div>
+                                  {/* Quantity */}
+                                  <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                    <input
+                                      type="number"
+                                      value={pump.quantity || ""}
+                                      onChange={(e) => handleTeamDetailChange(itemIndex, pumpIndex, 'pumps', 'quantity', e.target.value)}
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      min="1"
+                                    />
                                   </div>
                                 </div>
 
+                                {/* Action Buttons */}
                                 <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
                                   <button
                                     type="button"
@@ -1264,6 +1254,130 @@ const UpdateOrderChild = ({ onClose, order, onUpdateOrder }) => {
                             ))}
                           </div>
                         </div>
+
+                        <div className="p-6 bg-[#FFF8F3] border-t border-orange-200 rounded-b-xl">
+                          <div className="flex items-center mb-4">
+                            <h4 className="text-md font-medium text-orange-800">Team - Accessories</h4>
+                          </div>
+
+                          <div className="space-y-6">
+                            {item.teamAssignments.accessories.map((accessory, accIndex) => (
+                              <div
+                                key={`accessory-${itemIndex}-${accIndex}`}
+                                className="relative bg-white rounded-lg shadow-sm p-5 border border-orange-100 overflow-visible"
+                              >
+                                <div className="grid grid-cols-12 gap-4">
+                                  {/* Accessory Name - col-span-6 */}
+                                  <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Accessory Name</label>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={accessoriesSearches[`${itemIndex}-${accIndex}`] || ""}
+                                        placeholder={accessory.accessories_name !== "N/A" ? accessory.accessories_name : "Please Select"}
+                                        onFocus={() => {
+                                          setIsDropdownVisible(`accessory-${itemIndex}-${accIndex}`);
+                                          setFilteredAccessoryData(accessories.filter(a => a.name !== "N/A"));
+                                        }}
+                                        onChange={(e) => {
+                                          const searchValue = e.target.value;
+                                          const newSearches = { ...accessoriesSearches };
+                                          newSearches[`${itemIndex}-${accIndex}`] = searchValue;
+                                          setAccessoriesSearches(newSearches);
+
+                                          const searchTerm = searchValue.toLowerCase();
+                                          const filtered = accessories.filter(a =>
+                                            a.name.toLowerCase().includes(searchTerm)
+                                          );
+                                          setFilteredAccessoryData(filtered);
+                                        }}
+                                        className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+                focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors
+                placeholder:text-gray-400 z-50"
+                                      />
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-5 w-5 absolute right-3 top-3 text-orange-500"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+
+                                      {isDropdownVisible === `accessory-${itemIndex}-${accIndex}` && (
+                                        <div className="absolute z-50 w-full mt-1 min-w-[400px] bg-white shadow-xl max-h-60 rounded-md py-1 text-sm overflow-auto border border-orange-200">
+                                          {filteredAccessoryData.length > 0 ? (
+                                            filteredAccessoryData.map((accItem, idx) => (
+                                              <div
+                                                key={idx}
+                                                className="cursor-pointer px-4 py-3 hover:bg-orange-50 transition-colors flex items-center"
+                                                onClick={() => {
+                                                  const newSearches = { ...accessoriesSearches };
+                                                  newSearches[`${itemIndex}-${accIndex}`] = accItem.name;
+                                                  setAccessoriesSearches(newSearches);
+
+                                                  handleTeamDetailChange(itemIndex, accIndex, 'accessories', 'accessories_name', accItem.name);
+                                                  setIsDropdownVisible(null);
+                                                }}
+                                              >
+                                                <span className="text-orange-700 font-medium">
+                                                  {accItem.name === "N/A" ? "Please Select" : accItem.name}
+                                                </span>
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <div className="px-4 py-3 text-gray-500 italic">No results found</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Quantity - col-span-6 */}
+                                  <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-sm font-medium text-orange-800 mb-2">Quantity</label>
+                                    <input
+                                      type="number"
+                                      value={accessory.quantity || ""}
+                                      onChange={(e) =>
+                                        handleTeamDetailChange(itemIndex, accIndex, 'accessories', 'quantity', e.target.value)
+                                      }
+                                      className="w-full px-4 py-3 border border-orange-300 rounded-md text-sm 
+              focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                                      min="1"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Add/Remove Buttons */}
+                                <div className="absolute top-0 right-0 flex space-x-1 -mt-3 -mr-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => addTeamAssignment(itemIndex, 'accessories')}
+                                    className="bg-orange-100 hover:bg-orange-200 p-1 rounded-full text-orange-700 border border-orange-300 shadow-sm transition"
+                                    title="Add Accessory Item"
+                                  >
+                                    <Plus size={16} strokeWidth={2.5} />
+                                  </button>
+                                  {item.teamAssignments.accessories.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeTeamAssignment(itemIndex, accIndex, 'accessories')}
+                                      className="bg-orange-100 hover:bg-orange-200 p-1 rounded-full text-orange-700 border border-orange-300 shadow-sm transition"
+                                      title="Remove Accessory Item"
+                                    >
+                                      <Trash size={16} strokeWidth={2.5} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+
+
                       </div>
                     ))}
 

@@ -27,7 +27,7 @@ export const SocketProvider = ({ children }) => {
                 pumps: 'pumpdata',
                 caps: 'capdata',
                 glass: 'bottledata',
-                accessories: 'accessories'
+                accessories: 'accessoriesData'
             };
 
             const cachedData = {};

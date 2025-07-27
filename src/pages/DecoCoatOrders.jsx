@@ -42,20 +42,47 @@ const DecoCaotOrders = ({ orderType }) => {
         return completed > 0 ? 'In Progress' : 'Pending';
     };
 
-    const isItemCompleted = (item) => {
-        const coatingAssignments = item.team_assignments?.coating || [];
-        if (coatingAssignments.length === 0) return false;
-        return coatingAssignments.every(assignment => getRemainingQty(assignment) === 0);
+    const filterOrdersByTeamStatus = (orders, teamKey) => {
+        return orders.filter(order => {
+            // Check if order has assignments for this team
+            const hasTeamAssignments = order.item_ids?.some(item =>
+                item.team_assignments?.[teamKey] && item.team_assignments[teamKey].length > 0
+            );
+
+            if (!hasTeamAssignments) return false;
+
+            // Determine team-specific completion status
+            const isTeamCompleted = isOrderCompletedForTeam(order, teamKey);
+
+            // For pending tab: show if team work is not complete
+            // For completed tab: show if team work is complete
+            if (orderType.toLowerCase() === 'pending') {
+                return !isTeamCompleted;
+            } else {
+                return isTeamCompleted;
+            }
+        });
     };
 
-    const isOrderCompleted = (order) => {
+    const isOrderCompletedForTeam = (order, teamKey) => {
         const items = order.item_ids || [];
         if (items.length === 0) return false;
-        return items.every(item => isItemCompleted(item));
+
+        return items.every(item => {
+            const teamAssignments = item.team_assignments?.[teamKey] || [];
+            if (teamAssignments.length === 0) return true; // No assignments = considered complete
+
+            return teamAssignments.every(assignment => {
+                const completed = assignment.team_tracking?.total_completed_qty || 0;
+                const total = assignment.quantity || 0;
+                return completed >= total;
+            });
+        });
     };
 
     const updateOrderStatus = (updatedOrder) => {
-        const isCompleted = isOrderCompleted(updatedOrder);
+        // WRONG: 'FROSTING' should be 'frosting' (lowercase)
+        const isCompleted = isOrderCompletedForTeam(updatedOrder, 'coating'); // ✅ FIXED
         const newStatus = isCompleted ? 'Completed' : 'Pending';
 
         if (updatedOrder.order_status !== newStatus) {
@@ -63,7 +90,6 @@ const DecoCaotOrders = ({ orderType }) => {
         }
 
         updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.COATING);
-
         return updatedOrder;
     };
 
@@ -74,7 +100,8 @@ const DecoCaotOrders = ({ orderType }) => {
     };
 
     const updateBothCaches = (orderData, targetGlassItem = null) => {
-        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        // WRONG: using 'printing' instead of 'frosting'
+        const teamOrderStatus = isOrderCompletedForTeam(orderData, 'coating') ? 'completed' : 'pending'; // ✅ FIXED
 
         let existingOrder = null;
         let existingOrderType = null;
@@ -93,57 +120,58 @@ const DecoCaotOrders = ({ orderType }) => {
         ['pending', 'completed'].forEach(type => {
             if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
                 let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
+
+                // Remove existing order from this cache if it exists
                 cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
-                if (orderStatus === type) {
+
+                // Add order to this cache if it should be here (using team status)
+                if (teamOrderStatus === type) {
                     if (existingOrder) {
-                        // Merge with existing order
                         const mergedOrder = mergeOrders(existingOrder, orderData, targetGlassItem);
                         cachedOrders = [mergedOrder, ...cachedOrders];
-                        console.log('✅ Merged order into', type, 'cache');
                     } else {
                         cachedOrders = [orderData, ...cachedOrders];
-                        console.log('✅ Added new order to', type, 'cache');
                     }
                 }
 
                 saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.COATING);
             } else {
-
-                if (orderStatus === type) {
+                // No existing cache - create new one if order belongs here
+                if (teamOrderStatus === type) {
                     saveTeamOrdersToLocalStorage([orderData], type, TEAMS.COATING);
-                    console.log('✅ Created new', type, 'cache with order');
                 }
             }
         });
     };
+
 
     const handleNewOrder = useCallback((orderData) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
         const targetGlassItem = orderData.targetGlassItem;
 
+        // Check if order has assignments for this team
         if (!hascoatingAssignments(newOrder)) {
-            console.log('❌ Order has no printing assignments, ignoring');
             return;
         }
 
-        updateBothCaches(newOrder, targetGlassItem);
-        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
+        // Determine team-specific status instead of global status
+        const isTeamCompleted = isOrderCompletedForTeam(newOrder, 'coating');
+        const teamOrderStatus = isTeamCompleted ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
-        if (orderStatus !== currentViewType) {
-            console.log('⚠️ Order belongs to different tab, removing from current view if exists');
+        // Update both caches with team-specific logic
+        updateBothCaches(newOrder, targetGlassItem);
 
-            setOrders(prevOrders => {
-                const filtered = prevOrders.filter(order => order._id !== newOrder._id);
-                if (filtered.length !== prevOrders.length) {
-                    console.log('🗑️ Removed order from current view');
-                }
-                return filtered;
-            });
+        // Only update UI if order belongs to current team view
+        if (teamOrderStatus !== currentViewType) {
+            setOrders(prevOrders =>
+                prevOrders.filter(order => order._id !== newOrder._id)
+            );
             return;
         }
 
+        // Update current view
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
             let updatedOrders;
@@ -153,69 +181,42 @@ const DecoCaotOrders = ({ orderType }) => {
                 const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Merged order in current view:', newOrder.order_number);
             } else {
                 updatedOrders = [newOrder, ...prevOrders];
-                console.log('✅ Added order to current view:', newOrder.order_number);
             }
+
             return updatedOrders;
         });
-    }, [orderType, hascoatingAssignments, isOrderCompleted]);
+    }, [orderType]);
 
-
-    const handleOrderUpdate = useCallback((updateData) => {
+    // FIXED: Update handleOrderUpdate to use team-specific filtering
+    const handleOrderUpdate = useCallback(async (updateData) => {
         if (!updateData.orderData) return;
+
         const updatedOrder = updateData.orderData;
-        const targetGlassItem = updateData.targetGlassItem;
 
-        if (updateData.wasRemoved || !hascoatingAssignments(updatedOrder)) {
-            console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
+        try {
+            // Fetch both pending and completed orders
+            const [pendingResponse, completedResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/coat?orderType=pending`),
+                axios.get(`http://localhost:5000/api/coat?orderType=completed`)
+            ]);
 
-            ['pending', 'completed'].forEach(type => {
-                if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
-                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
-                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.COATING);
-                }
-            });
+            const allOrders = [
+                ...(pendingResponse.data.data || []),
+                ...(completedResponse.data.data || [])
+            ];
 
-            setOrders(prevOrders => {
-                return prevOrders.filter(order => order._id !== updatedOrder._id);
-            });
-            return;
+            const teamFilteredOrders = filterOrdersByTeamStatus(allOrders, 'coating');
+            saveTeamOrdersToLocalStorage(teamFilteredOrders, orderType, TEAMS.COATING);
+            setOrders(teamFilteredOrders);
+            setFilteredOrders(teamFilteredOrders);
+
+        } catch (error) {
+            console.error('❌ Error fetching fresh order data:', error);
+            toast.error('Failed to refresh order data');
         }
-
-        updateBothCaches(updatedOrder, targetGlassItem);
-
-        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-        const currentViewType = orderType.toLowerCase();
-
-        if (orderStatus !== currentViewType) {
-            console.log('⚠️ Order moved to different tab, removing from current view');
-            setOrders(prevOrders => {
-                return prevOrders.filter(order => order._id !== updatedOrder._id);
-            });
-            return;
-        }
-
-        setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id !== updatedOrder._id);
-            let updatedOrders;
-
-            if (existingOrderIndex >= 0) {
-                const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
-                updatedOrders = [...prevOrders];
-                updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Updated order in current view:', updatedOrder.order_number);
-            } else {
-                updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('✅ Added order to current view:', updatedOrder.order_number);
-            }
-
-            return updatedOrders;
-        });
-    }, [orderType, hascoatingAssignments, isOrderCompleted]);
+    }, [orderType])
 
     const handleOrderDeleted = useCallback((deleteData) => {
         try {
@@ -251,13 +252,6 @@ const DecoCaotOrders = ({ orderType }) => {
 
 
     const mergeOrders = (existingOrder, newOrder, targetGlassItem = null) => {
-        console.log('🔧 Merging orders:', {
-            existingOrderId: existingOrder._id,
-            newOrderId: newOrder._id,
-            targetGlassItem,
-            isFiltered: !!targetGlassItem
-        });
-
         const existingItemsMap = {};
         const newItemsMap = {};
 
@@ -370,23 +364,38 @@ const DecoCaotOrders = ({ orderType }) => {
     const fetchcoatingOrders = async (type = orderType) => {
         try {
             setLoading(true);
+
+            // Check cache first
             if (hasTeamOrdersInLocalStorage(type, TEAMS.COATING)) {
                 const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.COATING);
-                setOrders(cachedOrders);
-                setFilteredOrders(cachedOrders);
+                const filteredOrders = filterOrdersByTeamStatus(cachedOrders, 'coating');
+                setOrders(filteredOrders);
+                setFilteredOrders(filteredOrders);
                 setLoading(false);
                 return;
             }
 
-            const response = await axios.get(`http://localhost:5000/api/coat?orderType=${type}`);
-            const fetchedOrders = response.data.data || [];
+            const [pendingResponse, completedResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/coat?orderType=pending`),
+                axios.get(`http://localhost:5000/api/coat?orderType=completed`)
+            ]);
 
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.COATING);
-            setOrders(fetchedOrders);
-            setFilteredOrders(fetchedOrders);
+            const allOrders = [
+                ...(pendingResponse.data.data || []),
+                ...(completedResponse.data.data || [])
+            ];
+
+            // Filter orders based on team-specific status
+            const teamFilteredOrders = filterOrdersByTeamStatus(allOrders, 'coating');
+
+            // Cache the filtered results
+            saveTeamOrdersToLocalStorage(teamFilteredOrders, type, TEAMS.COATING);
+            setOrders(teamFilteredOrders);
+            setFilteredOrders(teamFilteredOrders);
             setLoading(false);
+
         } catch (err) {
-            setError('Failed to fetch coating orders: ' + (err.response?.data?.message || err.message));
+            setError('Failed to fetch frosting orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
         }
     };
@@ -641,7 +650,7 @@ const DecoCaotOrders = ({ orderType }) => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-orange-700">
-                        Printing Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
+                        Coating Team {orderType.charAt(0).toUpperCase() + orderType.slice(1)} Orders
                     </h2>
                 </div>
 

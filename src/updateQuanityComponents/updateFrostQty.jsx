@@ -311,7 +311,7 @@ const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
             <div className="bg-orange-600 text-white px-4 py-3 flex justify-between gap-4 rounded-md">
               <div>
                 <DialogTitle as="h2" className="text-xl font-bold">
-                  Update Foil Production
+                  Update Frost Production
                   <p className="text-orange-100 text-sm">
                     Order #{orderData?.order_number} - {itemData?.name}
                   </p>

@@ -5,18 +5,18 @@ import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
-import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
+
 import AddNewBottle from '../pages/AddNewBottle.jsx';
 import AddNewCap from '../pages/AddNewCap.jsx';
 import AddNewPump from '../pages/AddNewPump.jsx';
-import AddNewBox from '../pages/AddNewBox.jsx';
+
 import AddNewAccessories from '../pages/AddNewAccessories.jsx';
 import AddNewCustomers from '../pages/AddCustomers.jsx';
 
 
 const DispatcherDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('customers');
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState({});
@@ -56,7 +56,7 @@ const DispatcherDashboard = () => {
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'DASHBOARD', type: 'single' },
+   
     {
       id: 'customers',
       label: 'ADD CUSTOMERS',
@@ -70,7 +70,7 @@ const DispatcherDashboard = () => {
         { id: 'bottle', label: 'BOTTLES' },
         { id: 'caps', label: 'CAPS' },
         { id: 'pumps', label: 'PUMPS' },
-        { id: 'boxes', label: 'BOXES' },
+      
         { id: 'accessories', label: 'ACCESSORIES' },
       ]
     }
@@ -158,8 +158,7 @@ const DispatcherDashboard = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <DispatcherInventoryDashboard />;
+     
       case 'customers':
         return <div className="text-center text-gray-500 ">
           <AddNewCustomers />
@@ -176,10 +175,7 @@ const DispatcherDashboard = () => {
         return <div className="text-center text-gray-500 ">
           <AddNewPump />
         </div>;
-      case 'boxes':
-        return <div className="text-center text-gray-500">
-          <AddNewBox />
-        </div>;
+     
       case 'accessories':
         return <div className="text-center text-gray-500">
           <AddNewAccessories />

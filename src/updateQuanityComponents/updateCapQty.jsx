@@ -26,19 +26,50 @@ const UpdateCapQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         return process && process.includes('Metal');
     };
 
-    useEffect(() => {
-        if (isOpen && itemData?.team_assignments?.caps) {
-            setAssignments(itemData.team_assignments.caps.map(assignment => ({
-                ...assignment,
-                todayMetalQty: 0,
-                todayAssemblyQty: 0,
-                metalNotes: '',
-                assemblyNotes: ''
-            })));
-            setError(null);
-            setSuccessMessage('');
-        }
-    }, [isOpen, itemData]);
+   useEffect(() => {
+    if (isOpen && itemData?.team_assignments?.caps) {
+        // Only reset assignments if modal is just opening (not on subsequent updates)
+        setAssignments(prevAssignments => {
+            // If no previous assignments exist, initialize fresh
+            if (!prevAssignments || prevAssignments.length === 0) {
+                return itemData.team_assignments.caps.map(assignment => ({
+                    ...assignment,
+                    todayMetalQty: 0,
+                    todayAssemblyQty: 0,
+                    metalNotes: '',
+                    assemblyNotes: ''
+                }));
+            }
+            
+            // If assignments exist, preserve user input while updating assignment data
+            return itemData.team_assignments.caps.map(assignment => {
+                const existingAssignment = prevAssignments.find(prev => prev._id === assignment._id);
+                
+                if (existingAssignment) {
+                    // Preserve user input fields, update everything else
+                    return {
+                        ...assignment,
+                        todayMetalQty: existingAssignment.todayMetalQty,
+                        todayAssemblyQty: existingAssignment.todayAssemblyQty,
+                        metalNotes: existingAssignment.metalNotes,
+                        assemblyNotes: existingAssignment.assemblyNotes
+                    };
+                } else {
+                    // New assignment, initialize fresh
+                    return {
+                        ...assignment,
+                        todayMetalQty: 0,
+                        todayAssemblyQty: 0,
+                        metalNotes: '',
+                        assemblyNotes: ''
+                    };
+                }
+            });
+        });
+        setError(null);
+        setSuccessMessage('');
+    }
+}, [isOpen, itemData]);
 
     const handleQuantityChange = (assignmentIndex, processType, value) => {
         const newAssignments = [...assignments];

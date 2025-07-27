@@ -42,20 +42,48 @@ const DecoFoilOrders = ({ orderType }) => {
         return completed > 0 ? 'In Progress' : 'Pending';
     };
 
-    const isItemCompleted = (item) => {
-        const foilingAssignments = item.team_assignments?.foiling || [];
-        if (foilingAssignments.length === 0) return false;
-        return foilingAssignments.every(assignment => getRemainingQty(assignment) === 0);
+    const filterOrdersByTeamStatus = (orders, teamKey) => {
+        return orders.filter(order => {
+            // Check if order has assignments for this team
+            const hasTeamAssignments = order.item_ids?.some(item =>
+                item.team_assignments?.[teamKey] && item.team_assignments[teamKey].length > 0
+            );
+
+            if (!hasTeamAssignments) return false;
+
+            // Determine team-specific completion status
+            const isTeamCompleted = isOrderCompletedForTeam(order, teamKey);
+
+            // For pending tab: show if team work is not complete
+            // For completed tab: show if team work is complete
+            if (orderType.toLowerCase() === 'pending') {
+                return !isTeamCompleted;
+            } else {
+                return isTeamCompleted;
+            }
+        });
     };
 
-    const isOrderCompleted = (order) => {
+    const isOrderCompletedForTeam = (order, teamKey) => {
         const items = order.item_ids || [];
         if (items.length === 0) return false;
-        return items.every(item => isItemCompleted(item));
+
+        return items.every(item => {
+            const teamAssignments = item.team_assignments?.[teamKey] || [];
+            if (teamAssignments.length === 0) return true; // No assignments = considered complete
+
+            return teamAssignments.every(assignment => {
+                const completed = assignment.team_tracking?.total_completed_qty || 0;
+                const total = assignment.quantity || 0;
+                return completed >= total;
+            });
+        });
     };
 
+
     const updateOrderStatus = (updatedOrder) => {
-        const isCompleted = isOrderCompleted(updatedOrder);
+        // WRONG: 'FROSTING' should be 'frosting' (lowercase)
+        const isCompleted = isOrderCompletedForTeam(updatedOrder, 'foiling'); // ✅ FIXED
         const newStatus = isCompleted ? 'Completed' : 'Pending';
 
         if (updatedOrder.order_status !== newStatus) {
@@ -63,7 +91,6 @@ const DecoFoilOrders = ({ orderType }) => {
         }
 
         updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.FOILING);
-
         return updatedOrder;
     };
 
@@ -79,7 +106,8 @@ const DecoFoilOrders = ({ orderType }) => {
     };
 
     const updateBothCaches = (orderData, targetGlassItem = null) => {
-        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        // WRONG: using 'printing' instead of 'frosting'
+        const teamOrderStatus = isOrderCompletedForTeam(orderData, 'foiling') ? 'completed' : 'pending'; // ✅ FIXED
 
         let existingOrder = null;
         let existingOrderType = null;
@@ -98,25 +126,25 @@ const DecoFoilOrders = ({ orderType }) => {
         ['pending', 'completed'].forEach(type => {
             if (hasTeamOrdersInLocalStorage(type, TEAMS.FOILING)) {
                 let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
+
+                // Remove existing order from this cache if it exists
                 cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
-                if (orderStatus === type) {
+
+                // Add order to this cache if it should be here (using team status)
+                if (teamOrderStatus === type) {
                     if (existingOrder) {
-                        // Merge with existing order
                         const mergedOrder = mergeOrders(existingOrder, orderData, targetGlassItem);
                         cachedOrders = [mergedOrder, ...cachedOrders];
-                        console.log('✅ Merged order into', type, 'cache');
                     } else {
                         cachedOrders = [orderData, ...cachedOrders];
-                        console.log('✅ Added new order to', type, 'cache');
                     }
                 }
 
                 saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.FOILING);
             } else {
-
-                if (orderStatus === type) {
+                // No existing cache - create new one if order belongs here
+                if (teamOrderStatus === type) {
                     saveTeamOrdersToLocalStorage([orderData], type, TEAMS.FOILING);
-                    console.log('✅ Created new', type, 'cache with order');
                 }
             }
         });
@@ -127,112 +155,74 @@ const DecoFoilOrders = ({ orderType }) => {
         const newOrder = orderData.orderData;
         const targetGlassItem = orderData.targetGlassItem;
 
-        console.log('🔍 New order received:', {
-            orderNumber: newOrder.order_number,
-            targetGlassItem,
-            hasTargetGlass: !!targetGlassItem,
-            currentTab: orderType
-        });
-
+        // Check if order has assignments for this team
         if (!hasfoilingAssignments(newOrder)) {
-            console.log('❌ Order has no foiling assignments, ignoring');
             return;
         }
 
-        // Update both caches first - this is crucial
+        // Determine team-specific status instead of global status
+        const isTeamCompleted = isOrderCompletedForTeam(newOrder, 'foiling');
+        const teamOrderStatus = isTeamCompleted ? 'completed' : 'pending';
+        const currentViewType = orderType.toLowerCase();
+
+        // Update both caches with team-specific logic
         updateBothCaches(newOrder, targetGlassItem);
 
-        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
-        const currentViewType = orderType.toLowerCase();
-
-        console.log('📊 Order status check:', {
-            orderStatus,
-            currentViewType,
-            shouldShowInCurrentTab: orderStatus === currentViewType
-        });
-
-        // SINGLE setOrders call that handles all cases
-        setOrders(prevOrders => {
-            // First, always remove any existing instance of this order
-            const filteredOrders = prevOrders.filter(order => order._id !== newOrder._id);
-
-            // Only add the order if it belongs to the current view
-            if (orderStatus === currentViewType) {
-                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-
-                if (existingOrderIndex >= 0) {
-                    // Merge with existing order
-                    const existingOrder = prevOrders[existingOrderIndex];
-                    const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
-                    console.log('✅ Merged order in current view:', newOrder.order_number);
-                    return [mergedOrder, ...filteredOrders];
-                } else {
-                    // Add new order
-                    console.log('✅ Added order to current view:', newOrder.order_number);
-                    return [newOrder, ...filteredOrders];
-                }
-            } else {
-                // Order doesn't belong to current view, just return filtered list
-                console.log('⚠️ Order belongs to different tab, removed from current view');
-                return filteredOrders;
-            }
-        });
-    }, [orderType, hasfoilingAssignments, isOrderCompleted]);
-
-
-    const handleOrderUpdate = useCallback((updateData) => {
-        if (!updateData.orderData) return;
-        const updatedOrder = updateData.orderData;
-        const targetGlassItem = updateData.targetGlassItem;
-
-        if (updateData.wasRemoved || !hasfoilingAssignments(updatedOrder)) {
-            console.log('🗑️ Removing order from printing:', updatedOrder.order_number);
-
-            ['pending', 'completed'].forEach(type => {
-                if (hasTeamOrdersInLocalStorage(type, TEAMS.FOILING)) {
-                    let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
-                    cachedOrders = cachedOrders.filter(order => order._id !== updatedOrder._id);
-                    saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.FOILING);
-                }
-            });
-
-            setOrders(prevOrders => {
-                return prevOrders.filter(order => order._id !== updatedOrder._id);
-            });
+        // Only update UI if order belongs to current team view
+        if (teamOrderStatus !== currentViewType) {
+            setOrders(prevOrders =>
+                prevOrders.filter(order => order._id !== newOrder._id)
+            );
             return;
         }
 
-        updateBothCaches(updatedOrder, targetGlassItem);
-
-        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
-        const currentViewType = orderType.toLowerCase();
-
-        if (orderStatus !== currentViewType) {
-            console.log('⚠️ Order moved to different tab, removing from current view');
-            setOrders(prevOrders => {
-                return prevOrders.filter(order => order._id !== updatedOrder._id);
-            });
-            return;
-        }
-
+        // Update current view
         setOrders(prevOrders => {
-            const existingOrderIndex = prevOrders.findIndex(order => order._id !== updatedOrder._id);
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
             let updatedOrders;
 
             if (existingOrderIndex >= 0) {
                 const existingOrder = prevOrders[existingOrderIndex];
-                const mergedOrder = mergeOrders(existingOrder, updatedOrder, targetGlassItem);
+                const mergedOrder = mergeOrders(existingOrder, newOrder, targetGlassItem);
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = mergedOrder;
-                console.log('✅ Updated order in current view:', updatedOrder.order_number);
             } else {
-                updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('✅ Added order to current view:', updatedOrder.order_number);
+                updatedOrders = [newOrder, ...prevOrders];
             }
 
             return updatedOrders;
         });
-    }, [orderType, hasfoilingAssignments, isOrderCompleted]);
+    }, [orderType]);
+
+    // FIXED: Update handleOrderUpdate to use team-specific filtering
+    const handleOrderUpdate = useCallback(async (updateData) => {
+        if (!updateData.orderData) return;
+
+        const updatedOrder = updateData.orderData;
+
+        try {
+            // Fetch both pending and completed orders
+            const [pendingResponse, completedResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/foil?orderType=pending`),
+                axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+            ]);
+
+            const allOrders = [
+                ...(pendingResponse.data.data || []),
+                ...(completedResponse.data.data || [])
+            ];
+
+            const teamFilteredOrders = filterOrdersByTeamStatus(allOrders, 'foiling');
+            saveTeamOrdersToLocalStorage(teamFilteredOrders, orderType, TEAMS.FOILING);
+            setOrders(teamFilteredOrders);
+            setFilteredOrders(teamFilteredOrders);
+
+        } catch (error) {
+            console.error('❌ Error fetching fresh order data:', error);
+            toast.error('Failed to refresh order data');
+        }
+    }, [orderType]);
+
 
     const handleOrderDeleted = useCallback((deleteData) => {
         try {
@@ -366,39 +356,43 @@ const DecoFoilOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-    useEffect(() => {
-        const handleBufferedOrder = (e) => {
-            console.log('📥 Accessories got NEW ORDER event from buffer', e.detail);
-            handleNewOrder(e.detail);
-        };
-
-        window.addEventListener('socket-new-order', handleBufferedOrder);
-
-        return () => {
-            window.removeEventListener('socket-new-order', handleBufferedOrder);
-        };
-    }, [handleNewOrder]);
+  
 
     const fetchfoilingOrders = async (type = orderType) => {
         try {
             setLoading(true);
+
+            // Check cache first
             if (hasTeamOrdersInLocalStorage(type, TEAMS.FOILING)) {
                 const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.FOILING);
-                setOrders(cachedOrders);
-                setFilteredOrders(cachedOrders);
+                const filteredOrders = filterOrdersByTeamStatus(cachedOrders, 'foiling');
+                setOrders(filteredOrders);
+                setFilteredOrders(filteredOrders);
                 setLoading(false);
                 return;
             }
 
-            const response = await axios.get(`http://localhost:5000/api/foil?orderType=${type}`);
-            const fetchedOrders = response.data.data || [];
+            const [pendingResponse, completedResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/foil?orderType=pending`),
+                axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+            ]);
 
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.FOILING);
-            setOrders(fetchedOrders);
-            setFilteredOrders(fetchedOrders);
+            const allOrders = [
+                ...(pendingResponse.data.data || []),
+                ...(completedResponse.data.data || [])
+            ];
+
+            // Filter orders based on team-specific status
+            const teamFilteredOrders = filterOrdersByTeamStatus(allOrders, 'foiling');
+
+            // Cache the filtered results
+            saveTeamOrdersToLocalStorage(teamFilteredOrders, type, TEAMS.FOILING);
+            setOrders(teamFilteredOrders);
+            setFilteredOrders(teamFilteredOrders);
             setLoading(false);
+
         } catch (err) {
-            setError('Failed to fetch foiling orders: ' + (err.response?.data?.message || err.message));
+            setError('Failed to fetch frosting orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
         }
     };

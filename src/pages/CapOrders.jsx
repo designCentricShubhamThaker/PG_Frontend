@@ -49,6 +49,7 @@ const CapOrders = ({ orderType }) => {
 
         return totalQty;
     };
+
     const getOverallRemainingQty = (capItem) => {
         const totalQty = capItem.quantity || 0;
         const hasAssembly = hasAssemblyProcess(capItem.process);
@@ -82,6 +83,50 @@ const CapOrders = ({ orderType }) => {
         }
     };
 
+    const filterOrdersByTeamStatus = (orders, teamKey) => {
+        return orders.filter(order => {
+            // Check if order has assignments for this team
+            const hasTeamAssignments = order.item_ids?.some(item =>
+                item.team_assignments?.[teamKey] && item.team_assignments[teamKey].length > 0
+            );
+
+            if (!hasTeamAssignments) return false;
+
+            // Determine team-specific completion status
+            const isTeamCompleted = isOrderCompletedForTeam(order, teamKey);
+
+            // For pending tab: show if team work is not complete
+            // For completed tab: show if team work is complete
+            if (orderType.toLowerCase() === 'pending') {
+                return !isTeamCompleted;
+            } else {
+                return isTeamCompleted;
+            }
+        });
+    };
+
+    const isOrderCompletedForTeam = (order, teamKey) => {
+        const items = order.item_ids || [];
+        if (items.length === 0) return false;
+
+        return items.every(item => {
+            const teamAssignments = item.team_assignments?.[teamKey] || [];
+            if (teamAssignments.length === 0) return true; // No assignments = considered complete
+
+            // For caps team, use the caps-specific completion logic
+            if (teamKey === 'caps') {
+                return teamAssignments.every(capItem => getOverallRemainingQty(capItem) === 0);
+            }
+
+            // Default logic for other teams
+            return teamAssignments.every(assignment => {
+                const completed = assignment.team_tracking?.total_completed_qty || 0;
+                const total = assignment.quantity || 0;
+                return completed >= total;
+            });
+        });
+    };
+
     const isItemCompleted = (item) => {
         const capsAssignments = item.team_assignments?.caps || [];
         if (capsAssignments.length === 0) return false;
@@ -95,8 +140,20 @@ const CapOrders = ({ orderType }) => {
     };
 
     const determineCapOrderType = (order) => {
-        const isCompleted = isOrderCompleted(order);
+        const isCompleted = isOrderCompletedForTeam(order, 'caps');
         return isCompleted ? 'completed' : 'pending';
+    };
+
+    const updateOrderStatus = (updatedOrder) => {
+        const isCompleted = isOrderCompletedForTeam(updatedOrder, 'caps');
+        const newStatus = isCompleted ? 'Completed' : 'Pending';
+
+        if (updatedOrder.order_status !== newStatus) {
+            updatedOrder.order_status = newStatus;
+        }
+
+        updateOrderInLocalStorage(updatedOrder._id, updatedOrder, TEAMS.CAPS);
+        return updatedOrder;
     };
 
     const hascapsAssignments = (order) => {
@@ -106,15 +163,25 @@ const CapOrders = ({ orderType }) => {
     };
 
     const updateBothCaches = (orderData) => {
-        const orderStatus = isOrderCompleted(orderData) ? 'completed' : 'pending';
+        // Use team-specific completion status instead of global order status
+        const teamOrderStatus = isOrderCompletedForTeam(orderData, 'caps') ? 'completed' : 'pending';
+
         ['pending', 'completed'].forEach(type => {
             if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
                 let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
+                // Remove existing order from this cache
                 cachedOrders = cachedOrders.filter(order => order._id !== orderData._id);
-                if (orderStatus === type) {
+                
+                // Add order to this cache if it should be here (using team status)
+                if (teamOrderStatus === type) {
                     cachedOrders = [orderData, ...cachedOrders];
                 }
                 saveTeamOrdersToLocalStorage(cachedOrders, type, TEAMS.CAPS);
+            } else {
+                // No existing cache - create new one if order belongs here
+                if (teamOrderStatus === type) {
+                    saveTeamOrdersToLocalStorage([orderData], type, TEAMS.CAPS);
+                }
             }
         });
     };
@@ -123,28 +190,41 @@ const CapOrders = ({ orderType }) => {
         if (!orderData.orderData) return;
         const newOrder = orderData.orderData;
 
+        // Check if order has assignments for this team
         if (!hascapsAssignments(newOrder)) {
-            console.log('Order has no glass assignments, ignoring');
             return;
         }
-        const orderStatus = isOrderCompleted(newOrder) ? 'completed' : 'pending';
+
+        // Determine team-specific status instead of global status
+        const isTeamCompleted = isOrderCompletedForTeam(newOrder, 'caps');
+        const teamOrderStatus = isTeamCompleted ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
+
+        // Update both caches with team-specific logic
         updateBothCaches(newOrder);
 
-        if (orderStatus === currentViewType) {
-            setOrders(prevOrders => {
-                const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
-                let updatedOrders;
-                if (existingOrderIndex >= 0) {
-                    updatedOrders = [...prevOrders];
-                    updatedOrders[existingOrderIndex] = newOrder;
-                } else {
-                    updatedOrders = [newOrder, ...prevOrders];
-                    console.log('Added new order:', newOrder.order_number);
-                }
-                return updatedOrders;
-            });
+        // Only update UI if order belongs to current team view
+        if (teamOrderStatus !== currentViewType) {
+            setOrders(prevOrders =>
+                prevOrders.filter(order => order._id !== newOrder._id)
+            );
+            return;
         }
+
+        // Update current view
+        setOrders(prevOrders => {
+            const existingOrderIndex = prevOrders.findIndex(order => order._id === newOrder._id);
+            let updatedOrders;
+
+            if (existingOrderIndex >= 0) {
+                updatedOrders = [...prevOrders];
+                updatedOrders[existingOrderIndex] = newOrder;
+            } else {
+                updatedOrders = [newOrder, ...prevOrders];
+            }
+
+            return updatedOrders;
+        });
     }, [orderType]);
 
     const handleOrderUpdate = useCallback((updateData) => {
@@ -152,6 +232,7 @@ const CapOrders = ({ orderType }) => {
         const updatedOrder = updateData.orderData;
         const { hasAssignments, wasRemoved } = updateData;
 
+        // If order was removed or has no caps assignments, remove from caches
         if (wasRemoved || !hasAssignments || !hascapsAssignments(updatedOrder)) {
             ['pending', 'completed'].forEach(type => {
                 if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
@@ -162,33 +243,38 @@ const CapOrders = ({ orderType }) => {
             });
 
             setOrders(prevOrders => {
-                const filteredOrders = prevOrders.filter(order => order._id !== updatedOrder._id);
-                return filteredOrders;
+                return prevOrders.filter(order => order._id !== updatedOrder._id);
             });
             return;
         }
 
+        // Update both caches with team-specific logic
         updateBothCaches(updatedOrder);
 
-        const orderStatus = isOrderCompleted(updatedOrder) ? 'completed' : 'pending';
+        // Determine team-specific status and current view
+        const isTeamCompleted = isOrderCompletedForTeam(updatedOrder, 'caps');
+        const teamOrderStatus = isTeamCompleted ? 'completed' : 'pending';
         const currentViewType = orderType.toLowerCase();
 
+        // Update current view
         setOrders(prevOrders => {
             const existingOrderIndex = prevOrders.findIndex(order => order._id === updatedOrder._id);
-            if (orderStatus !== currentViewType) {
+            
+            // If order doesn't belong to current view, remove it
+            if (teamOrderStatus !== currentViewType) {
                 if (existingOrderIndex >= 0) {
                     return prevOrders.filter(order => order._id !== updatedOrder._id);
                 }
                 return prevOrders;
             }
+
+            // Order belongs to current view
             let updatedOrders;
             if (existingOrderIndex >= 0) {
                 updatedOrders = [...prevOrders];
                 updatedOrders[existingOrderIndex] = updatedOrder;
-                console.log('Updated existing order:', updatedOrder.order_number);
             } else {
                 updatedOrders = [updatedOrder, ...prevOrders];
-                console.log('Added updated order to current view:', updatedOrder.order_number);
             }
             return updatedOrders;
         });
@@ -201,6 +287,8 @@ const CapOrders = ({ orderType }) => {
                 console.warn('No order ID in delete notification');
                 return;
             }
+
+            // Remove from both caches
             ['pending', 'completed'].forEach(type => {
                 if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
                     let cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
@@ -210,17 +298,19 @@ const CapOrders = ({ orderType }) => {
             });
 
             setOrders(prevOrders => {
-                return prevOrders.filter(order => order._id !== orderId);
+                const updatedOrders = prevOrders.filter(order => order._id !== orderId);
+                return updatedOrders;
             });
+
             setFilteredOrders(prevFiltered => {
                 return prevFiltered.filter(order => order._id !== orderId);
             });
-            deleteOrderFromLocalStorage(orderId, TEAMS.CAPS);
+
+            deleteOrderFromLocalStorage(orderId);
         } catch (error) {
             console.error('Error handling order delete notification:', error);
         }
     }, [orderType]);
-
 
     useEffect(() => {
         if (!socket) return;
@@ -235,23 +325,40 @@ const CapOrders = ({ orderType }) => {
         };
     }, [socket, handleNewOrder, handleOrderUpdate, handleOrderDeleted]);
 
-
     const fetchcapsOrders = async (type = orderType) => {
         try {
             setLoading(true);
+
+            // Check cache first
             if (hasTeamOrdersInLocalStorage(type, TEAMS.CAPS)) {
                 const cachedOrders = getTeamOrdersFromLocalStorage(type, TEAMS.CAPS);
-                setOrders(cachedOrders);
-                setFilteredOrders(cachedOrders);
+                const filteredOrders = filterOrdersByTeamStatus(cachedOrders, 'caps');
+                setOrders(filteredOrders);
+                setFilteredOrders(filteredOrders);
                 setLoading(false);
                 return;
             }
-            const response = await axios.get(`http://localhost:5000/api/caps?orderType=${type}`);
-            const fetchedOrders = response.data.data || [];
-            saveTeamOrdersToLocalStorage(fetchedOrders, type, TEAMS.CAPS);
-            setOrders(fetchedOrders);
-            setFilteredOrders(fetchedOrders);
+
+            // Fetch both pending and completed orders to determine team-specific status
+            const [pendingResponse, completedResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/caps?orderType=pending`),
+                axios.get(`http://localhost:5000/api/caps?orderType=completed`)
+            ]);
+
+            const allOrders = [
+                ...(pendingResponse.data.data || []),
+                ...(completedResponse.data.data || [])
+            ];
+
+            // Filter orders based on team-specific status
+            const teamFilteredOrders = filterOrdersByTeamStatus(allOrders, 'caps');
+
+            // Cache the filtered results
+            saveTeamOrdersToLocalStorage(teamFilteredOrders, type, TEAMS.CAPS);
+            setOrders(teamFilteredOrders);
+            setFilteredOrders(teamFilteredOrders);
             setLoading(false);
+
         } catch (err) {
             setError('Failed to fetch caps orders: ' + (err.response?.data?.message || err.message));
             setLoading(false);
@@ -308,9 +415,11 @@ const CapOrders = ({ orderType }) => {
         if (success) {
             console.log('Order updated successfully in localStorage');
 
+            // Use team-specific completion logic
             const newOrderType = determineCapOrderType(updatedOrder);
             const currentViewType = orderType.toLowerCase();
             console.log(`Order ${updatedOrder.order_number}: newType=${newOrderType}, currentView=${currentViewType}`);
+            
             if (newOrderType !== currentViewType) {
                 console.log(`Removing order ${updatedOrder.order_number} from ${currentViewType} view`);
                 setOrders(prevOrders => {
@@ -351,6 +460,7 @@ const CapOrders = ({ orderType }) => {
 
         handleClose();
     };
+
 
     const indexOfLastOrder = currentPage * ordersPerPage;
     const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;

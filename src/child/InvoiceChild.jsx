@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import { X, Download, FileText, Globe, Home, Building2, Calendar, Hash, User, MapPin, ChevronDown, ChevronRight, DollarSign, Euro, PoundSterling } from 'lucide-react';
+
 const InvoiceModal = ({ order, onClose }) => {
     const [orderType, setOrderType] = useState('');
     const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -9,8 +10,6 @@ const InvoiceModal = ({ order, onClose }) => {
     const [expandedStep, setExpandedStep] = useState(1);
     const [exchangeRates, setExchangeRates] = useState({ USD: 0, EUR: 0, GBP: 0 });
     const [isLoadingRates, setIsLoadingRates] = useState(false);
-
-
 
     const downloadPDF = () => {
         const element = document.getElementById('invoice-content');
@@ -219,7 +218,7 @@ const InvoiceModal = ({ order, onClose }) => {
             setTimeout(() => {
                 printWindow.focus();
                 printWindow.print();
-            }, 1000); 
+            }, 1000);
         };
     };
 
@@ -256,6 +255,14 @@ const InvoiceModal = ({ order, onClose }) => {
             fetchExchangeRates();
         }
     }, [orderType]);
+    const convertCurrency = (amountInINR, targetCurrency) => {
+        if (targetCurrency === 'INR') return amountInINR;
+
+        const rate = exchangeRates[targetCurrency];
+        if (!rate) return amountInINR;
+
+        return amountInINR * rate;
+    };
 
     const calculateGrandTotal = () => {
         if (!order?.item_ids) return 0;
@@ -274,12 +281,25 @@ const InvoiceModal = ({ order, onClose }) => {
 
         categories.forEach(category => {
             item.team_assignments?.[category.key]?.forEach(subItem => {
-                const subtotal = (parseFloat(subItem.quantity) * parseFloat(subItem.rate)) / 1000;
+                // Calculate in INR first
+                const subtotalINR = (parseFloat(subItem.quantity) * parseFloat(subItem.rate)) / 1000;
+
+                // Convert to target currency if international
+                const targetCurrency = orderType === 'international' ? selectedCountryData?.currency : 'INR';
+                const subtotal = convertCurrency(subtotalINR, targetCurrency);
+
+                // For international orders, show the converted rate too
+                const displayRate = orderType === 'international'
+                    ? convertCurrency(parseFloat(subItem.rate), targetCurrency)
+                    : parseFloat(subItem.rate);
+
                 items.push({
                     name: subItem[category.nameField],
                     quantity: subItem.quantity,
-                    rate: subItem.rate,
+                    rate: subItem.rate, // Original rate in INR
+                    displayRate: displayRate, // Rate in target currency
                     subtotal,
+                    subtotalINR, // Keep INR amount for reference
                     type: category.type
                 });
             });
@@ -292,6 +312,8 @@ const InvoiceModal = ({ order, onClose }) => {
         const items = getAllItemsForSingleItem(item);
         return items.reduce((total, subItem) => total + subItem.subtotal, 0);
     };
+
+
     const handleProceed = () => {
         if (!orderType) return;
         if (orderType === 'international' && (!invoiceNumber.trim() || !selectedCountry)) return;
@@ -304,10 +326,7 @@ const InvoiceModal = ({ order, onClose }) => {
         }
 
         const selectedCountryData = countries.find(c => c.currency === currency);
-        const rate = exchangeRates[currency] || 1;
-        const convertedAmount = amount * rate;
-
-        return `${selectedCountryData?.symbol}${convertedAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+        return `${selectedCountryData?.symbol}${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
     };
 
 
@@ -411,7 +430,7 @@ const InvoiceModal = ({ order, onClose }) => {
                                                 <Home className="h-6 w-6 flex-shrink-0" />
                                                 <div className="text-left">
                                                     <div className="font-semibold text-lg">Domestic Order</div>
-                                                    <div className="text-sm opacity-75">Invoice in Indian Rupees (₹)</div>
+                                                    <div className="text-sm opacity-75">Invoice in Indian Rupees (₹) | Rates per 1000 qty in INR</div>
                                                 </div>
                                             </button>
 
@@ -428,7 +447,7 @@ const InvoiceModal = ({ order, onClose }) => {
                                                 <Globe className="h-6 w-6 flex-shrink-0" />
                                                 <div className="text-left">
                                                     <div className="font-semibold text-lg">International Order</div>
-                                                    <div className="text-sm opacity-75">Export invoice with foreign currency</div>
+                                                    <div className="text-sm opacity-75">Export invoice | Rates per 1000 qty in foreign currency</div>
                                                 </div>
                                             </button>
                                         </div>
@@ -499,6 +518,12 @@ const InvoiceModal = ({ order, onClose }) => {
                                                     </div>
                                                 )}
 
+                                                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                                    <div className="text-sm text-yellow-800">
+                                                        <strong>Note:</strong> For international orders, rates should be entered per 1000 qty in the selected currency (USD/EUR/GBP).
+                                                    </div>
+                                                </div>
+
                                                 {countries.map((country) => {
                                                     const IconComponent = country.icon;
                                                     const rate = exchangeRates[country.currency];
@@ -521,7 +546,7 @@ const InvoiceModal = ({ order, onClose }) => {
                                                             </div>
                                                             <div className="text-right">
                                                                 <div className="text-sm font-medium">
-                                                                    Rate: {rate ? `₹1 = ${country.symbol}${rate.toFixed(4)}` : 'Loading...'}
+                                                                    Reference: {rate ? `₹1 = ${country.symbol}${rate.toFixed(4)}` : 'Loading...'}
                                                                 </div>
                                                             </div>
                                                         </button>
@@ -653,7 +678,7 @@ const InvoiceModal = ({ order, onClose }) => {
                                                 <th className="border border-gray-400 px-1.5 py-1.5 text-left w-16">Type</th>
                                                 <th className="border border-gray-400 px-1.5 py-1.5 text-left">Description</th>
                                                 <th className="border border-gray-400 px-1.5 py-1.5 text-center w-16">Qty</th>
-                                                <th className="border border-gray-400 px-1.5 py-1.5 text-center w-16">Rate</th>
+                                                <th className="border border-gray-400 px-1.5 py-1.5 text-center w-16">Rate/1000</th>
                                                 <th className="border border-gray-400 px-1.5 py-1.5 text-right w-20">Amount</th>
                                             </tr>
                                         </thead>
@@ -687,7 +712,10 @@ const InvoiceModal = ({ order, onClose }) => {
                                                                     {parseFloat(subItem.quantity).toLocaleString('en-IN')}
                                                                 </td>
                                                                 <td className="border border-gray-400 px-1.5 py-0.5 text-center text-xs">
-                                                                    ₹{subItem.rate}
+                                                                    {orderType === 'international' && selectedCountryData
+                                                                        ? `${selectedCountryData.symbol}${subItem.displayRate.toFixed(4)}`
+                                                                        : `₹${subItem.rate}`
+                                                                    }
                                                                 </td>
                                                                 <td className="border border-gray-400 px-1.5 py-0.5 text-right text-xs">
                                                                     {formatCurrency(subItem.subtotal, orderType === 'international' ? selectedCountryData?.currency : 'INR')}
@@ -731,7 +759,7 @@ const InvoiceModal = ({ order, onClose }) => {
                                                 </td>
                                                 <td className="border border-gray-400 px-2 py-1 text-xs">
                                                     {orderType === 'international' && selectedCountryData
-                                                        ? `${selectedCountryData.currency} ${numberToWords(Math.round(grandTotal * exchangeRates[selectedCountryData.currency]))}`
+                                                        ? `${selectedCountryData.currency} ${numberToWords(Math.round(grandTotal))}`
                                                         : `Rupees ${numberToWords(Math.round(grandTotal))}`
                                                     }
                                                 </td>
@@ -790,7 +818,5 @@ const InvoiceModal = ({ order, onClose }) => {
             </div>
         </Dialog>
     );
-};
-
-export default InvoiceModal;
-
+}
+export default InvoiceModal
