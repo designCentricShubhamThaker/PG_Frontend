@@ -14,9 +14,9 @@ import {
   saveOrdersToLocalStorage,
   deleteOrderFromLocalStorage,
   updateDispatcherOrderInLocalStorage
-} from '../utils/localStorageUtils';
-import UpdateOrderChild from '../child/UpdateOrderChild';
-import { useSocket } from '../context/SocketContext';
+} from '../utils/localStorageUtils.jsx';
+import UpdateOrderChild from '../child/UpdateOrderChild.jsx';
+import { useSocket } from '../context/SocketContext.jsx';
 import InvoiceModal from '../child/InvoiceChild.jsx';
 
 const DispatcherOrders = ({ orderType }) => {
@@ -65,7 +65,8 @@ const DispatcherOrders = ({ orderType }) => {
 
       console.log('Fetching all orders from API...');
       // Fetch all orders from API
-      const response = await axios.get(`http://localhost:5000/api/orders`);
+      // const response = await axios.get(`http://localhost:5000/api/orders`);
+      const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders`);
       const allOrders = response.data.data || [];
 
       if (allOrders.length === 0) {
@@ -118,7 +119,8 @@ const DispatcherOrders = ({ orderType }) => {
         return;
       }
       
-      const response = await axios.get(`http://localhost:5000/api/orders?orderType=${type}`);
+      // const response = await axios.get(`http://localhost:5000/api/orders?orderType=${type}`);
+      const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders?orderType=${type}`);
       const fetchedOrders = response.data.data || [];
 
       saveOrdersToLocalStorage(fetchedOrders, type, 'dispatcher');
@@ -719,8 +721,8 @@ const DispatcherOrders = ({ orderType }) => {
 
       const assignedTeams = getAssignedTeams(orderToDelete);
 
-      // const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}`);
-      const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
+      const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}`);
+      // const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
 
       if (response.data.success) {
         const deleteNotificationData = {

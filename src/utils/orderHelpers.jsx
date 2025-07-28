@@ -95,8 +95,8 @@ export const handleDuplicateOrder = async ({
   setDuplicateError("");
 
   try {
-    const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
-    // const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
+    // const response = await axios.get(`http://localhost:5000/api/orders/number/${duplicateOrderNumber.trim()}`);
+    const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/orders/number/${duplicateOrderNumber.trim()}`);
 
     if (response.data.success && response.data.data) {
       const orderData = response.data.data;

@@ -1,4 +1,4 @@
-import { DECORATION_SEQUENCES } from "./sequence";
+import { DECORATION_SEQUENCES } from "./sequence.jsx";
 
 export const isPreviousTeamsCompleted = (item, targetTeam, glassItemId, DECORATION_SEQUENCES) => {
   const glassAssignments = item.team_assignments?.glass || [];

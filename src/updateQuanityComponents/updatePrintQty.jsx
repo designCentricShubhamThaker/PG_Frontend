@@ -6,11 +6,11 @@ import {
     TEAMS,
     saveOrdersToLocalStorage,
     getOrdersFromLocalStorage,
-} from '../utils/localStorageUtils';
+} from '../utils/localStorageUtils.jsx';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
-import { DECORATION_SEQUENCES } from '../utils/sequence'; // Import this
+import { DECORATION_SEQUENCES } from '../utils/sequence.jsx'; // Import this
 
 const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
     const [assignments, setAssignments] = useState([]);
@@ -154,7 +154,12 @@ const UpdatePrintQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
                 }
             }
 
-            const response = await axios.patch('http://localhost:5000/api/print', {
+            // const response = await axios.patch('http://localhost:5000/api/print', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
+            const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/print', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates

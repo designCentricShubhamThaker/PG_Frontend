@@ -14,8 +14,8 @@ export const useAuth = () => {
 
 const loginUser = async (username, password) => {
   try {
-    // const response = await axios.post('https://pg-backend-o05l.onrender.com/api/auth/login', { username, password });
-    const response = await axios.post('http://localhost:5000/api/auth/login', { username, password });
+    const response = await axios.post('https://pg-backend-o05l.onrender.com/api/auth/login', { username, password });
+    // const response = await axios.post('http://localhost:5000/api/auth/login', { username, password });
     return response.data;
   } catch (error) {
     console.error('API login error:', error);

@@ -165,7 +165,12 @@ export const handleSubmitOrder = async ({
 
     if (isConnected) {
       try {
-        const response = await axios.post("http://localhost:5000/api/orders", orderData, {
+        // const response = await axios.post("http://localhost:5000/api/orders", orderData, {
+        //   headers: {
+        //     "Content-Type": "application/json"
+        //   }
+        // });
+        const response = await axios.post("https://pg-backend-o05l.onrender.com/api/orders", orderData, {
           headers: {
             "Content-Type": "application/json"
           }

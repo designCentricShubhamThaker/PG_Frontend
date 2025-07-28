@@ -425,8 +425,8 @@ const UpdateTeamOrderChild = ({ onClose, order, onUpdateOrder }) => {
         items: formattedItems
       };
 
-      // const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/orders/${order._id}`, orderData);
-      const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
+      const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/orders/${order._id}`, orderData);
+      // const response = await axios.put(`http://localhost:5000/api/orders/${order._id}`, orderData);
 
       if (response.data.success) {
         const updatedOrder = response.data.data;

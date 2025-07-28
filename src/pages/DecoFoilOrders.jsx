@@ -202,9 +202,13 @@ const DecoFoilOrders = ({ orderType }) => {
 
         try {
             // Fetch both pending and completed orders
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/foil?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/foil?orderType=pending`),
-                axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/foil?orderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/foil?orderType=completed`)
             ]);
 
             const allOrders = [
@@ -372,9 +376,13 @@ const DecoFoilOrders = ({ orderType }) => {
                 return;
             }
 
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/foil?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/foil?orderType=pending`),
-                axios.get(`http://localhost:5000/api/foil?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/foil?orderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/foil?orderType=completed`)
             ]);
 
             const allOrders = [

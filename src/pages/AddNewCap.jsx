@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddNewCapChild from '../child/AddNewCapChild.jsx';
-import { useSocket } from '../context/SocketContext'; // Updated import
+import { useSocket } from '../context/SocketContext.jsx'; // Updated import
 
 const AddNewCap = () => {
   const [filteredBottles, setFilteredBottles] = useState([]);

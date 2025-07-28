@@ -572,16 +572,16 @@ const CreateTeamOrderChild = ({ onClose, onCreateOrder }) => {
                 return;
             }
 
-            const response = await axios.post('http://localhost:5000/api/team-orders', orderData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-            // const response = await axios.post('https://pg-backend-o05l.onrender.com/api/team-orders', orderData, {
+            // const response = await axios.post('http://localhost:5000/api/team-orders', orderData, {
             //     headers: {
             //         'Content-Type': 'application/json',
             //     }
             // });
+            const response = await axios.post('https://pg-backend-o05l.onrender.com/api/team-orders', orderData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
 
             if (response.data.success) {
                 const newOrder = response.data.data;

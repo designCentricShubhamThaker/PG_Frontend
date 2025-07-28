@@ -7,9 +7,6 @@ import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
-import DispatcherInventoryDashboard from './DispatcherIneventoryDashboard.jsx';
-
-import TeamOrders from '../pages/TeamOrders.jsx';
 import DecoFrostOrders from '../pages/DecoFrostOrders.jsx';
 
 

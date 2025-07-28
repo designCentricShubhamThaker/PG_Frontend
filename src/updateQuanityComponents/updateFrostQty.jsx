@@ -7,7 +7,7 @@ import {
   TEAMS,
   saveOrdersToLocalStorage,
   getOrdersFromLocalStorage,
-} from '../utils/localStorageUtils';
+} from '../utils/localStorageUtils.jsx';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { isPreviousTeamsCompleted } from '../utils/isPreviousTeamCompleteted.jsx';
@@ -156,7 +156,12 @@ const UpdateFrostQty = ({ isOpen, onClose, orderData, itemData, onUpdate }) => {
         }
       }
 
-      const response = await axios.patch('http://localhost:5000/api/frost', {
+      // const response = await axios.patch('http://localhost:5000/api/frost', {
+      //   orderNumber: orderData.order_number,
+      //   itemId: itemData._id,
+      //   updates
+      // });
+      const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/frost', {
         orderNumber: orderData.order_number,
         itemId: itemData._id,
         updates

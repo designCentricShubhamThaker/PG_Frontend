@@ -7,7 +7,7 @@ import {
     TEAMS,
     saveOrdersToLocalStorage,
     getOrdersFromLocalStorage
-} from '../utils/localStorageUtils';
+} from '../utils/localStorageUtils.jsx';
 import { useAuth } from '../context/useAuth.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 
@@ -135,16 +135,16 @@ const UpdateAccessoriesQty = ({ isOpen, onClose, orderData, itemData, onUpdate }
                 }
             }
 
-            // const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/accessories', {
-            //     orderNumber: orderData.order_number,
-            //     itemId: itemData._id,
-            //     updates
-            // });
-            const response = await axios.patch('http://localhost:5000/api/accessories', {
+            const response = await axios.patch('https://pg-backend-o05l.onrender.com/api/accessories', {
                 orderNumber: orderData.order_number,
                 itemId: itemData._id,
                 updates
             });
+            // const response = await axios.patch('http://localhost:5000/api/accessories', {
+            //     orderNumber: orderData.order_number,
+            //     itemId: itemData._id,
+            //     updates
+            // });
 
             if (response.data.success) {
                 const updatedOrder = response.data.data.order;

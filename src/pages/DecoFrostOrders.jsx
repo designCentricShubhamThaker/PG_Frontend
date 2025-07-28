@@ -222,9 +222,13 @@ const DecoFrostOrders = ({ orderType }) => {
 
         try {
             // Fetch both pending and completed orders
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/frost?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/frost?orderType=completed`)
+            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/frost?orderType=pending`),
-                axios.get(`http://localhost:5000/api/frost?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/frost?orderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/frost?orderType=completed`)
             ]);
 
             const allOrders = [
@@ -406,9 +410,13 @@ const DecoFrostOrders = ({ orderType }) => {
             }
 
             // Fetch all orders (both pending and completed) from API
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/frost?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/frost?orderType=completed`)
+            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/frost?orderType=pending`),
-                axios.get(`http://localhost:5000/api/frost?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/frost?orderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/frost?orderType=completed`)
             ]);
 
             const allOrders = [

@@ -13,7 +13,7 @@ import {
   saveOrdersToLocalStorage,
   deleteOrderFromLocalStorage,
   updateDispatcherOrderInLocalStorage,
-} from '../utils/localStorageUtils';
+} from '../utils/localStorageUtils.jsx';
 import UpdateOrderChild from '../child/UpdateOrderChild.jsx';
 import { useSocket } from '../context/SocketContext.jsx';
 import { useAuth } from '../context/useAuth.jsx';
@@ -69,8 +69,11 @@ const TeamOrders = ({ orderType }) => {
 
       console.log(`📡 Fetching all orders from API for user ${user.username}...`);
       // Fetch all orders from API for this specific user
+      // const response = await axios.get(
+      //   `http://localhost:5000/api/team-orders?created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
+      // );
       const response = await axios.get(
-        `http://localhost:5000/api/team-orders?created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
+        `https://pg-backend-o05l.onrender.com/api/team-orders?created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
       );
 
       const allOrders = response.data.data || [];
@@ -139,8 +142,11 @@ const TeamOrders = ({ orderType }) => {
         return;
       }
 
+      // const response = await axios.get(
+      //   `http://localhost:5000/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
+      // );
       const response = await axios.get(
-        `http://localhost:5000/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
+        `https://pg-backend-o05l.onrender.com/api/team-orders?orderType=${type}&created_by=${user.username}&team=${encodeURIComponent(TEAMS.MARKETING)}`
       );
 
       const fetchedOrders = response.data.data || [];
@@ -731,8 +737,8 @@ const TeamOrders = ({ orderType }) => {
       const assignedTeams = getAssignedTeams(orderToDelete);
 
       // Updated API call with user parameter
-      const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}?user=${user.username}`);
-      // const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}?user=${user.username}`);
+      // const response = await axios.delete(`http://localhost:5000/api/orders/${orderId}?user=${user.username}`);
+      const response = await axios.delete(`https://pg-backend-o05l.onrender.com/api/orders/${orderId}?user=${user.username}`);
 
       if (response.data.success) {
         const deleteNotificationData = {

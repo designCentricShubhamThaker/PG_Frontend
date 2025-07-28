@@ -288,14 +288,14 @@ const PumpOrders = ({ orderType }) => {
             }
 
             // Fetch both pending and completed orders to determine team-specific status
-            // const [pendingResponse, completedResponse] = await Promise.all([
-            //     axios.get(`https://pg-backend-o05l.onrender.com/api/pump?sorderType=pending`),
-            //     axios.get(`https://pg-backend-o05l.onrender.com/api/pumps?orderType=completed`)
-            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/pumps?orderType=pending`),
-                axios.get(`http://localhost:5000/api/pumps?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/pump?sorderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/pumps?orderType=completed`)
             ]);
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/pumps?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/pumps?orderType=completed`)
+            // ]);
 
             const allOrders = [
                 ...(pendingResponse.data.data || []),

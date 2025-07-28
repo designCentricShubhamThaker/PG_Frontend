@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-
 import AddNewCustomerChild from '../child/AddNewCustomerChild.jsx';
 
 const AddNewCustomers = () => {

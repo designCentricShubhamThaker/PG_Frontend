@@ -5,11 +5,9 @@ import { Toaster } from 'react-hot-toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from '../context/useAuth.jsx';
-
 import AddNewBottle from '../pages/AddNewBottle.jsx';
 import AddNewCap from '../pages/AddNewCap.jsx';
 import AddNewPump from '../pages/AddNewPump.jsx';
-
 import AddNewAccessories from '../pages/AddNewAccessories.jsx';
 import AddNewCustomers from '../pages/AddCustomers.jsx';
 

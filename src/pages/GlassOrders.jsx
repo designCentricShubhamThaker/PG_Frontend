@@ -2,8 +2,6 @@ import { Search, Pencil, Package } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { FiEdit } from "react-icons/fi";
-import { toast } from 'react-hot-toast';
-
 import {
     TEAMS,
     deleteOrderFromLocalStorage,
@@ -275,9 +273,13 @@ const GlassOrders = ({ orderType }) => {
             }
 
             // Fetch both pending and completed orders to determine team-specific status
+            // const [pendingResponse, completedResponse] = await Promise.all([
+            //     axios.get(`http://localhost:5000/api/glass?orderType=pending`),
+            //     axios.get(`http://localhost:5000/api/glass?orderType=completed`)
+            // ]);
             const [pendingResponse, completedResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/glass?orderType=pending`),
-                axios.get(`http://localhost:5000/api/glass?orderType=completed`)
+                axios.get(`https://pg-backend-o05l.onrender.com/api/glass?orderType=pending`),
+                axios.get(`https://pg-backend-o05l.onrender.com/api/glass?orderType=completed`)
             ]);
 
             const allOrders = [

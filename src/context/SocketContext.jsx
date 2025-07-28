@@ -70,7 +70,8 @@ export const SocketProvider = ({ children }) => {
                 }
 
                 console.log(`🔄 Fetching ${key} from API...`);
-                const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+                // const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+                const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/${endpoint}`);
                 const data = response.data;
 
                 // Save to localStorage
@@ -147,7 +148,8 @@ export const SocketProvider = ({ children }) => {
 
         try {
             setLoading(true);
-            const response = await axios.post(`http://localhost:5000/api/${endpoint}`, data);
+            // const response = await axios.post(`http://localhost:5000/api/${endpoint}`, data);
+            const response = await axios.post(`https://pg-backend-o05l.onrender.com/api/${endpoint}`, data);
             const newItem = response.data;
             updateItemInStore(type, newItem, 'create');
             socket.emit('item-created', { type, item: newItem });
@@ -180,7 +182,8 @@ export const SocketProvider = ({ children }) => {
 
         try {
             setLoading(true);
-            const response = await axios.put(`http://localhost:5000/api/${endpoint}/${id}`, data);
+            // const response = await axios.put(`http://localhost:5000/api/${endpoint}/${id}`, data);
+            const response = await axios.put(`https://pg-backend-o05l.onrender.com/api/${endpoint}/${id}`, data);
             const updatedItem = response.data;
 
             // Update local store immediately
@@ -218,7 +221,8 @@ export const SocketProvider = ({ children }) => {
 
         try {
             setLoading(true);
-            await axios.delete(`http://localhost:5000/api/${endpoint}/${id}`);
+            // await axios.delete(`http://localhost:5000/api/${endpoint}/${id}`);
+            await axios.delete(`https://pg-backend-o05l.onrender.com/api/${endpoint}/${id}`);
 
             // Update local store immediately
             updateItemInStore(type, { _id: id }, 'delete');
@@ -260,7 +264,8 @@ export const SocketProvider = ({ children }) => {
 
             // Fetch from API
             console.log(`🔄 Loading ${type} from API...`);
-            const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+            // const response = await axios.get(`http://localhost:5000/api/${endpoint}`);
+            const response = await axios.get(`https://pg-backend-o05l.onrender.com/api/${endpoint}`);
             const items = response.data;
 
             // Update store and localStorage
@@ -306,7 +311,16 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (!user || !user.role) return;
 
-        const socketInstance = io('http://localhost:5000', {
+        // const socketInstance = io('http://localhost:5000', {
+        //     withCredentials: true,
+        //     transports: ['websocket', 'polling'],
+        //     query: {
+        //         userId: user.id || 'anonymous',
+        //         role: user.role,
+        //         team: user.team || 'unknown',
+        //     }
+        // });
+        const socketInstance = io('https://pg-backend-o05l.onrender.com', {
             withCredentials: true,
             transports: ['websocket', 'polling'],
             query: {
